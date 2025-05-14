@@ -1,0 +1,5 @@
+-- ccache will be used for faster recompilation
+-- git describe returned 'fatal: bad revision 'HEAD''
+-- Could not use 'git describe' to determine PROJECT_VER.
+-- Building ESP-IDF components for target esp32s3
+-- Configuring incomplete, errors occurred!
