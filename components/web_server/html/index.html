@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoKey - Configuración</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .menu-item {
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .menu-item:hover {
+            background-color: #2980b9;
+        }
+        .cancel {
+            background-color: #e74c3c;
+            margin-top: 20px;
+        }
+        .cancel:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Configuración de EcoKey</h1>
+    <div class="menu">
+        <a href="/formmac" class="menu-item">Configurar MAC del Dispositivo</a>
+        <a href="/formred" class="menu-item">Configurar Red WiFi</a>
+        <a href="/cancel" class="menu-item cancel">Cancelar</a>
+    </div>
+</body>
+</html>
