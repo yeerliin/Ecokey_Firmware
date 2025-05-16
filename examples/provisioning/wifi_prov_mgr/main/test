@@ -1,0 +1,298 @@
+#include <stdio.h>
+#include <string.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/event_groups.h>
+#include <esp_log.h>
+#include <esp_wifi.h>
+#include <esp_event.h>
+#include <nvs_flash.h>
+#include <esp_netif.h>
+#include <esp_http_server.h>
+#include "cJSON.h"
+
+static const char *TAG = "PROV_WEB";
+#define WIFI_CONNECTED_EVENT BIT0
+#define WIFI_FAIL_EVENT BIT1
+static EventGroupHandle_t wifi_event_group;
+
+// HTML EcoKey UX Multipaso
+static const char *html_form =
+"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>EcoKey Setup</title>"
+"<meta name='viewport' content='width=device-width, initial-scale=1'>"
+"<style>"
+"body{font-family:'Segoe UI',Arial,sans-serif;background:#f2f6f3;margin:0;}"
+"header{background:#24b47e;color:white;padding:1.2em 0;text-align:center;box-shadow:0 2px 8px #0002;}"
+".logo{display:inline-block;vertical-align:middle;}"
+".logo svg{height:50px;}"
+"header h1{display:inline-block;margin-left:14px;font-size:2em;font-weight:600;vertical-align:middle;letter-spacing:1px;}"
+"main{max-width:400px;background:white;margin:2.5em auto 0;border-radius:14px;box-shadow:0 6px 32px #0002;padding:2.2em 2em;}"
+".step{display:none;}"
+".step.active{display:block;}"
+"label{font-weight:500;display:block;margin-top:1em;color:#24b47e;}"
+"input,select{width:100%;padding:0.7em 0.6em;margin-top:0.2em;border-radius:6px;border:1px solid #b4ccb9;font-size:1em;background:#f9faf9;}"
+"input:focus,select:focus{outline:2px solid #24b47e33;border-color:#24b47e;}"
+".buttons{margin-top:2.1em;text-align:center;}"
+"button{background:#24b47e;color:white;border:none;padding:0.7em 1.7em;border-radius:6px;font-size:1.1em;font-weight:500;cursor:pointer;margin:0 0.6em;box-shadow:0 2px 8px #24b47e22;transition:background 0.2s;}"
+"button[disabled]{background:#a8e1c9;cursor:default;}"
+"button:hover:not([disabled]){background:#159357;}"
+".error{color:#f44336;font-size:0.95em;margin-top:0.3em;min-height:1.2em;display:block;}"
+".loading{text-align:center;margin-top:1.1em;color:#24b47e;font-weight:500;}"
+"#msg{margin-top:2em;color:#159357;text-align:center;font-size:1.1em;min-height:2em;}"
+"@media(max-width:500px){main{padding:1em 0.5em;}}"
+"</style>"
+"</head><body>"
+"<header>"
+"<span class='logo'>"
+"  <svg viewBox='0 0 64 64' fill='none'><circle cx='32' cy='32' r='32' fill='#24b47e'/>"
+"  <path d='M43.7 26.1c-2.5 5-8.2 7.6-14.2 6.5-2.3-.4-4.3-1.7-5.8-3.5-.3-.3-.9-.1-.9.4v6.8c0 2.8 2.3 5.1 5.1 5.1h10c2.8 0 5.1-2.3 5.1-5.1v-9c0-.5-.6-.7-.9-.4z' fill='#fff'/>"
+"  <ellipse cx='32' cy='22' rx='10' ry='7' fill='#fff'/>"
+"</svg>"
+"</span>"
+"<h1>EcoKey Setup</h1>"
+"</header>"
+"<main>"
+"<div id='step1' class='step active'>"
+"  <h2>¡Bienvenido a EcoKey!</h2>"
+"  <p style='margin-bottom:2em;'>Este asistente te ayudará a configurar tu dispositivo.<br>Haz clic en <b>Continuar</b> para comenzar.</p>"
+"  <div class='buttons'>"
+"    <button onclick='setStep(2)'>Continuar</button>"
+"  </div>"
+"</div>"
+"<div id='step2' class='step'>"
+"  <h2>Paso 1: Datos clave</h2>"
+"  <form id='form2' autocomplete='off'>"
+"    <label for='mac_objetivo'>MAC objetivo *</label>"
+"    <input type='text' id='mac_objetivo' maxlength='17' placeholder='AA:BB:CC:DD:EE:FF' required oninput='validateStep2()'>"
+"    <small style='color:#999;'>Formato: AA:BB:CC:DD:EE:FF</small>"
+"    <label for='temporizador'>Temporizador (minutos) *</label>"
+"    <input type='number' id='temporizador' min='1' max='1440' required oninput='validateStep2()' placeholder='Ej: 30'>"
+"    <span class='error' id='error2'></span>"
+"    <div class='buttons'>"
+"      <button type='button' onclick='setStep(1)'>Atrás</button>"
+"      <button type='button' id='next2' onclick='nextStep2()' disabled>Siguiente</button>"
+"    </div>"
+"  </form>"
+"</div>"
+"<div id='step3' class='step'>"
+"  <h2>Paso 2: WiFi</h2>"
+"  <form id='form3' autocomplete='off'>"
+"    <label for='ssid'>Selecciona la red WiFi *</label>"
+"    <select id='ssid'></select>"
+"    <div class='loading' id='loading'>Cargando redes WiFi...</div>"
+"    <label for='password'>Contraseña *</label>"
+"    <input type='password' id='password' required oninput='validateStep3()'>"
+"    <span class='error' id='error3'></span>"
+"    <div class='buttons'>"
+"      <button type='button' onclick='setStep(2)'>Atrás</button>"
+"      <button type='submit' id='finalizar' disabled>Finalizar</button>"
+"    </div>"
+"  </form>"
+"</div>"
+"<div id='msg'></div>"
+"</main>"
+"<script>"
+"let userData = {};"
+"function setStep(s){"
+"  for(let i=1;i<=3;i++) document.getElementById('step'+i).className='step'+(i===s?' active':'');"
+"  document.getElementById('msg').innerText='';"
+"}"
+"function validateStep2(){"
+"  let mac=document.getElementById('mac_objetivo').value.trim();"
+"  let tmp=document.getElementById('temporizador').value;"
+"  let re=/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;"
+"  let valid= re.test(mac) && tmp && Number(tmp)>0;"
+"  document.getElementById('next2').disabled=!valid;"
+"  document.getElementById('error2').innerText='';"
+"}"
+"function nextStep2(){"
+"  let mac=document.getElementById('mac_objetivo').value.trim();"
+"  let re=/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;"
+"  let tmp=document.getElementById('temporizador').value;"
+"  if(!re.test(mac)){document.getElementById('error2').innerText='MAC inválida.';return;}"
+"  if(!tmp || Number(tmp)<=0){document.getElementById('error2').innerText='Introduce un temporizador válido.';return;}"
+"  userData.mac_objetivo=mac;"
+"  userData.temporizador=tmp;"
+"  setStep(3);"
+"  document.getElementById('loading').style.display='block';"
+"  document.getElementById('ssid').innerHTML='';"
+"  fetch('/scan').then(res=>res.json()).then(list=>{"
+"    let sel=document.getElementById('ssid');"
+"    sel.innerHTML='';"
+"    list.forEach(net=>{"
+"      let opt=document.createElement('option');"
+"      opt.value=net.ssid;"
+"      opt.text=net.ssid+' ('+net.rssi+' dBm)';"
+"      sel.appendChild(opt);"
+"    });"
+"    document.getElementById('loading').style.display='none';"
+"    validateStep3();"
+"  }).catch(()=>{document.getElementById('loading').textContent='Error al escanear redes WiFi';});"
+"}"
+"function validateStep3(){"
+"  let pw=document.getElementById('password').value;"
+"  document.getElementById('finalizar').disabled = pw.length<8;"
+"  document.getElementById('error3').innerText=pw.length&&pw.length<8?'La contraseña debe tener mínimo 8 caracteres.':'';"
+"}"
+"document.getElementById('form3').onsubmit = async function(e){"
+"  e.preventDefault();"
+"  userData.ssid = document.getElementById('ssid').value;"
+"  userData.password = document.getElementById('password').value;"
+"  if(!userData.ssid||userData.password.length<8){"
+"    document.getElementById('error3').innerText='Completa todos los campos y pon una contraseña válida.';return;}"
+"  document.getElementById('finalizar').disabled=true;"
+"  document.getElementById('msg').innerText='Configurando...';"
+"  let r = await fetch('/custom-data', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(userData)});"
+"  let txt = await r.text();"
+"  document.getElementById('msg').innerText = txt;"
+"  if(txt && txt.includes('éxito')){ setTimeout(()=>{window.close();},3500); }"
+"  else{ document.getElementById('finalizar').disabled=false; }"
+"};"
+"</script></body></html>";
+
+// -------------- Handlers backend ---------------
+esp_err_t root_get_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_send(req, html_form, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+esp_err_t custom_data_post_handler(httpd_req_t *req)
+{
+    char buf[512];
+    int ret = httpd_req_recv(req, buf, sizeof(buf));
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
+        return ESP_FAIL;
+    }
+    buf[ret] = 0;
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    nvs_handle_t handle;
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &handle));
+    const char *fields[] = {"mac_objetivo", "temporizador", "ssid", "password", NULL};
+    for (int i = 0; fields[i]; i++) {
+        cJSON *item = cJSON_GetObjectItem(root, fields[i]);
+        if (cJSON_IsString(item) && item->valuestring) {
+            nvs_set_str(handle, fields[i], item->valuestring);
+        }
+    }
+    nvs_commit(handle);
+
+    wifi_config_t wifi_cfg = {0};
+    size_t len;
+    nvs_get_str(handle, "ssid", NULL, &len);
+    nvs_get_str(handle, "ssid", (char *)wifi_cfg.sta.ssid, &len);
+    nvs_get_str(handle, "password", NULL, &len);
+    nvs_get_str(handle, "password", (char *)wifi_cfg.sta.password, &len);
+
+    nvs_close(handle);
+    cJSON_Delete(root);
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA)); // Cierra el AP
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_connect());
+
+    // Esperar confirmación real
+    EventBits_t bits = xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_EVENT|WIFI_FAIL_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(7000));
+    if (bits & WIFI_CONNECTED_EVENT) {
+        httpd_resp_sendstr(req, "¡Configuración completada con éxito! El dispositivo está conectado. Puedes cerrar esta ventana.");
+    } else {
+        httpd_resp_sendstr(req, "Error: no se pudo conectar a la WiFi. Por favor, revisa la contraseña e inténtalo de nuevo.");
+    }
+    return ESP_OK;
+}
+
+esp_err_t scan_wifi_get_handler(httpd_req_t *req)
+{
+    uint16_t ap_num = 0;
+    wifi_ap_record_t ap_records[20];
+
+    wifi_scan_config_t scan_conf = { .ssid=0,.bssid=0,.channel=0,.show_hidden=true };
+    esp_wifi_scan_start(&scan_conf, true);
+    esp_wifi_scan_get_ap_num(&ap_num);
+    if (ap_num > 20) ap_num = 20;
+    esp_wifi_scan_get_ap_records(&ap_num, ap_records);
+
+    cJSON *root = cJSON_CreateArray();
+    for (int i = 0; i < ap_num; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "ssid", (const char *)ap_records[i].ssid);
+        cJSON_AddNumberToObject(item, "rssi", ap_records[i].rssi);
+        cJSON_AddNumberToObject(item, "authmode", ap_records[i].authmode);
+        cJSON_AddItemToArray(root, item);
+    }
+    char *resp = cJSON_PrintUnformatted(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    cJSON_Delete(root);
+    free(resp);
+    return ESP_OK;
+}
+
+static httpd_handle_t start_webserver(void)
+{
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    httpd_handle_t server = NULL;
+    if (httpd_start(&server, &config) == ESP_OK) {
+        httpd_uri_t root = { .uri="/",.method=HTTP_GET,.handler=root_get_handler,.user_ctx=NULL };
+        httpd_register_uri_handler(server, &root);
+
+        httpd_uri_t custom_data = { .uri="/custom-data",.method=HTTP_POST,.handler=custom_data_post_handler,.user_ctx=NULL };
+        httpd_register_uri_handler(server, &custom_data);
+
+        httpd_uri_t scan_wifi = { .uri="/scan",.method=HTTP_GET,.handler=scan_wifi_get_handler,.user_ctx=NULL };
+        httpd_register_uri_handler(server, &scan_wifi);
+    }
+    return server;
+}
+
+// ---- Event handler con éxito/fallo WiFi y cierre AP ----
+static void event_handler(void *arg, esp_event_base_t event_base,
+                         int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT) {
+        switch (event_id) {
+        case WIFI_EVENT_STA_START:
+            esp_wifi_connect();
+            break;
+        case WIFI_EVENT_STA_DISCONNECTED:
+            ESP_LOGI(TAG, "Desconectado. Reintentando...");
+            static int retry=0; retry++;
+            if(retry<3) esp_wifi_connect();
+            else xEventGroupSetBits(wifi_event_group, WIFI_FAIL_EVENT);
+            break;
+        case WIFI_EVENT_AP_STACONNECTED:
+            ESP_LOGI(TAG, "Cliente conectado al SoftAP");
+            break;
+        default:
+            break;
+        }
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "Conectado con IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_EVENT);
+        ESP_LOGI(TAG, "Cerrando SoftAP. Solo modo estación.");
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    }
+}
+
+void app_main(void)
+{
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK(nvs_flash_init());
+    }
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
