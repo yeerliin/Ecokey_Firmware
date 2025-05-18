@@ -181,6 +181,8 @@ static inline uint8_t nvs_manager_get_u8(const char* key, uint8_t default_value)
  */
 esp_err_t nvs_manager_save_mac(const char *mac);
 
+void info_NVS(void);
+
 #ifdef __cplusplus
 }
 #endif

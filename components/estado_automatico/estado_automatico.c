@@ -6,6 +6,8 @@
 #include "esp_timer.h"
 #include "ble_scanner.h"
 #include "relay_controller.h"
+#include "nvs_manager.h"
+#include <string.h>
 
 static const char *TAG = "ESTADO_AUTO";
 static bool estado_activo = false;
@@ -58,6 +60,31 @@ esp_err_t estado_automatico_iniciar(void) {
     }
 
     ESP_LOGI(TAG, "Iniciando el modo automático");
+
+    // Recuperar la MAC objetivo desde NVS
+    char mac_objetivo[18] = {0}; // Formato XX:XX:XX:XX:XX:XX (17 chars + null)
+    esp_err_t err = nvs_manager_get_string("mac_objetivo", mac_objetivo, sizeof(mac_objetivo));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error al recuperar MAC objetivo de NVS: %s", esp_err_to_name(err));
+        return ESP_FAIL;
+    }
+    if (strlen(mac_objetivo) < 12) {
+        ESP_LOGE(TAG, "MAC objetivo no válida: %s", mac_objetivo);
+        return ESP_FAIL;
+    }
+    // Configurar la MAC en el escáner BLE
+    ESP_LOGI(TAG, "Configurando escáner BLE para MAC objetivo: %s", mac_objetivo);
+    err = ble_scanner_configurar_mac_objetivo_texto(BLE_TARGET_INDEX, mac_objetivo);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error al configurar MAC objetivo en escáner BLE: %s", esp_err_to_name(err));
+        return ESP_FAIL;
+    }
+    // Iniciar el escáner BLE si no está iniciado
+    err = ble_scanner_iniciar(NULL);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error al iniciar escáner BLE: %s", esp_err_to_name(err));
+        return ESP_FAIL;
+    }
     estado_activo = true;
 
     if (automatico_task_handle == NULL) {

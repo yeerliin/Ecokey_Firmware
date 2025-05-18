@@ -11,7 +11,6 @@
 // Inclusiones de los módulos de estados específicos
 #include "estado_automatico.h"
 #include "estado_manual.h"
-#include "estado_inicio.h"
 #include "estado_configuracion.h"
 // Inclusión para funciones de manipulación de strings
 #include <string.h> 
@@ -45,7 +44,6 @@ typedef struct {
 
 // Tabla que mapea cada estado con sus funciones asociadas y su nombre
 static const estado_entry_t tabla_estados[] = {
-    { ESTADO_INICIO,          estado_inicio_iniciar,        estado_inicio_detener,        "INICIO" },
     { ESTADO_CONFIGURACION,   estado_configuracion_iniciar, estado_configuracion_detener, "CONFIGURACION" },
     { ESTADO_MANUAL,          estado_manual_iniciar,        estado_manual_detener,        "MANUAL" },
     { ESTADO_AUTOMATICO,      estado_automatico_iniciar,    estado_automatico_detener,    "AUTOMATICO" },
@@ -228,8 +226,8 @@ esp_err_t app_control_iniciar_estado(void) {
     estado_app_t estado = (estado_app_t)estado_nvs;
 
     if (estado == ESTADO_INVALIDO) {
-        ESP_LOGI(TAG, LOG_PREFIX_BOOT " Primer arranque detectado. Iniciando con estado INICIO");
-        ret = app_control_cambiar_estado(ESTADO_INICIO);
+        ESP_LOGI(TAG, LOG_PREFIX_BOOT " Primer arranque detectado. Iniciando con estado CONFIGURARACION");
+        ret = app_control_cambiar_estado(ESTADO_CONFIGURACION);
     } else {
         const estado_entry_t *entry = buscar_estado_entry(estado);
         ESP_LOGI(TAG, LOG_PREFIX_BOOT " Restaurando estado guardado: %s (%d)", 

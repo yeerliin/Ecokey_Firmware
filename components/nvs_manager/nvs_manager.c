@@ -493,3 +493,5 @@ esp_err_t nvs_manager_save_mac(const char *mac)
     nvs_close(nvs_handle);
     return err;
 }
+
+

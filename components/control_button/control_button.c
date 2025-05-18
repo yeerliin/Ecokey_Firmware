@@ -5,6 +5,7 @@
 #include "app_control.h"
 #include "esp_log.h"
 #include "relay_controller.h"
+#include "nvs_manager.h"
 
 static const char *TAG = "CONTROL_BUTTON";
 static estado_app_t estado_anterior = ESTADO_INVALIDO;
@@ -42,7 +43,7 @@ static void accion_larga(void)
         app_control_lanzar_transicion(estado_anterior, TAG);
     } else {
         ESP_LOGW(TAG, "Por defecto Automatico");
-        app_control_lanzar_transicion(ESTADO_MANUAL, TAG);
+        app_control_lanzar_transicion(ESTADO_AUTOMATICO, TAG);
     }
 }
 
@@ -54,10 +55,30 @@ static void accion_muy_larga(void)
 
 static void accion_reset(void)
 {
-    ESP_LOGI(TAG, "Reset: reiniciando dispositivo...");
-    // Ejemplo: borrar configuración y reiniciar
-    // nvs_manager_reset_all();
-    // esp_restart();
+    ESP_LOGI(TAG, "Reset: Iniciando formateo de fábrica...");
+    
+ 
+    // Borrar todas las claves NVS
+    esp_err_t err = nvs_manager_erase_all();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error al borrar NVS: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Borrado de NVS exitoso");
+    }
+    
+    // Pequeña pausa para permitir que se complete el log y el parpadeo
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    // Reiniciar a valores de fábrica
+    ESP_LOGI(TAG, "Reiniciando dispositivo...");
+    
+    // Asegurar que el estado inicial sea CONFIGURACION al reiniciar
+    // Esto es redundante porque al borrar NVS ya no hay estado guardado
+    // pero añade protección extra
+    nvs_manager_set_u8("app_estado", ESTADO_CONFIGURACION);
+    
+    // Reiniciar el dispositivo
+    esp_restart();
 }
 
 

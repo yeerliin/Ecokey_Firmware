@@ -4,7 +4,6 @@
 
 // Definición de estados posibles
 typedef enum {
-    ESTADO_INICIO = 0, // Añadimos este nuevo estado como primera opción
     ESTADO_CONFIGURACION = 1,
     ESTADO_MANUAL = 2,
     ESTADO_AUTOMATICO = 3, 
