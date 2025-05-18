@@ -5,7 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led.h" // Añadido para controlar el LED
-#include "wifi_ap.h" 
+#include "provisioning_wifi.h" // Añadido para el manejo del WiFi provisioning
 
 
 
@@ -20,8 +20,14 @@ esp_err_t estado_configuracion_iniciar(void) {
         return ESP_OK;
     }
     
-    // Iniciar AP sin contraseña para evitar problemas de autenticación
-    WiFiManager_initAP("ESP32-Config", "123456789");
+    if(!provisioning_wifi_is_done()) {
+        ESP_LOGW(TAG, "El provisioning no está completo");
+        return ESP_FAIL;
+    }else{
+        ESP_LOGI(TAG, "El provisioning está completo");
+    }
+    provisioning_wifi_init();   // por única vez
+    provisioning_wifi_start();  // entra al modo BLE o SoftAP
     
    
     ESP_LOGI(TAG, "Iniciando el modo configuración");
