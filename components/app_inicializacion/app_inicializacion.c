@@ -9,9 +9,9 @@
 #include "relay_controller.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "wifi_ble_coex.h"
 
 static const char *TAG = "APP_INIT";
-
 esp_err_t inicializar_componentes(void)
 {
     esp_err_t ret;
