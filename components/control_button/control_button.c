@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "relay_controller.h"
 #include "nvs_manager.h"
+#include "estado_manual.h"  // Añadido para acceder a las funciones de estado_manual
 
 static const char *TAG = "CONTROL_BUTTON";
 static estado_app_t estado_anterior = ESTADO_INVALIDO;
@@ -23,10 +24,25 @@ typedef struct {
 static void accion_rapida(void)
 {
     if (app_control_obtener_estado_actual() == ESTADO_MANUAL) {
-        bool estado;
-        relay_controller_get_state(&estado);
-        relay_controller_set_state(!estado);
-        ESP_LOGI(TAG, "Pulsación rápida: relé %s", !estado ? "ACTIVADO" : "DESACTIVADO");
+        // Delegamos la lógica de alternar el relé al componente estado_manual
+        esp_err_t ret = estado_manual_alternar_rele();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Error al alternar relé: %s", esp_err_to_name(ret));
+        }
+    }
+}
+
+static void accion_doble_pulsacion(void)
+{
+    estado_app_t actual = app_control_obtener_estado_actual();
+    if (actual == ESTADO_AUTOMATICO) {
+        ESP_LOGI(TAG, "Doble pulsación: cambiando a ESTADO_MANUAL");
+        app_control_lanzar_transicion(ESTADO_MANUAL, TAG);
+    } else if (actual == ESTADO_MANUAL) {
+        ESP_LOGI(TAG, "Doble pulsación: cambiando a ESTADO_AUTOMATICO");
+        app_control_lanzar_transicion(ESTADO_AUTOMATICO, TAG);
+    } else {
+        ESP_LOGI(TAG, "Doble pulsación: sin acción (solo alterna entre AUTOMATICO y MANUAL)");
     }
 }
 
@@ -86,6 +102,7 @@ static void accion_reset(void)
 
 static const entrada_accion_boton_t acciones_boton[] = {
     { BOTON_PULSACION_SIMPLE,      accion_rapida },
+    { BOTON_DOBLE_PULSACION,       accion_doble_pulsacion },
     { BOTON_PULSACION_LARGA,       accion_larga },
     { BOTON_PULSACION_MUY_LARGA,   accion_muy_larga },
     { BOTON_PULSACION_RESET,       accion_reset },

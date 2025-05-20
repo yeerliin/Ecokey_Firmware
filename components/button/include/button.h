@@ -15,12 +15,17 @@ extern "C" {
  */
 typedef enum {
     BOTON_PULSACION_SIMPLE,      /*!< Evento cuando se detecta una pulsación corta */
+    BOTON_DOBLE_PULSACION,       /*!< Evento cuando se detecta una doble pulsación rápida */
     BOTON_PULSACION_LARGA,       /*!< Evento cuando se detecta una pulsación de 3 segundos */
     BOTON_PULSACION_MUY_LARGA,   /*!< Evento cuando se detecta una pulsación de 7 segundos */
     BOTON_PULSACION_RESET,       /*!< Evento cuando se detecta una pulsación de 12 segundos */
     BOTON_PRESIONADO,            /*!< Evento cuando el botón se acaba de presionar */
     BOTON_LIBERADO,              /*!< Evento cuando el botón se acaba de liberar */
 } tipo_evento_boton_t;
+
+/**
+ * @note Una doble pulsación rápida se detecta si se presiona dos veces el botón con menos de 400 ms entre liberaciones.
+ */
 
 /**
  * @brief Función de callback para eventos del botón

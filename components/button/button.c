@@ -20,6 +20,9 @@ static const char *ETIQUETA = "BOTON";
 #define TIEMPO_MUY_LARGO_MS     7000
 #define TIEMPO_RESET_MS         12000
 
+// Intervalo máximo entre dos pulsaciones simples para considerar doble pulsación (en ms)
+#define INTERVALO_DOBLE_PULSACION_MS 400
+
 // Tamaños de pila para las tareas
 #define STACK_SIZE_TAREA_BOTON  4096
 #define STACK_SIZE_EVENTO_BOTON 4096
@@ -58,6 +61,10 @@ static QueueHandle_t cola_eventos = NULL;
 static TaskHandle_t tarea_boton = NULL;
 static SemaphoreHandle_t mutex_boton = NULL;
 static bool inicializado = false;
+
+// Variables para doble pulsación
+static int64_t tiempo_ultima_simple = 0;
+static bool esperando_segunda_pulsacion = false;
 
 /**
  * @brief Callback del temporizador para umbrales de tiempo
@@ -250,18 +257,25 @@ static void tarea_procesar_eventos(void *arg)
                                     tipo_evento = BOTON_PULSACION_LARGA;
                                     ESP_LOGI(ETIQUETA, "Evento: Largo (%lld ms)", duracion);
                                 }
-                                else if (duracion < TIEMPO_CORTO_MS) {
-                                    tipo_evento = BOTON_PULSACION_SIMPLE;
-                                    ESP_LOGI(ETIQUETA, "Evento: Simple (%lld ms)", duracion);
-                                }
                                 else {
-                                    // Si está entre corto y largo, lo consideramos simple
-                                    tipo_evento = BOTON_PULSACION_SIMPLE;
-                                    ESP_LOGI(ETIQUETA, "Evento: Simple (%lld ms)", duracion);
+                                    // Detección de doble pulsación rápida
+                                    int64_t ahora = esp_timer_get_time() / 1000;
+                                    if (esperando_segunda_pulsacion && 
+                                        (ahora - tiempo_ultima_simple) <= INTERVALO_DOBLE_PULSACION_MS) {
+                                        tipo_evento = BOTON_DOBLE_PULSACION;
+                                        ESP_LOGI(ETIQUETA, "Evento: Doble pulsación (%lld ms)", ahora - tiempo_ultima_simple);
+                                        esperando_segunda_pulsacion = false;
+                                        tiempo_ultima_simple = 0;
+                                    } else {
+                                        tipo_evento = BOTON_PULSACION_SIMPLE;
+                                        ESP_LOGI(ETIQUETA, "Evento: Simple (%lld ms)", duracion);
+                                        esperando_segunda_pulsacion = true;
+                                        tiempo_ultima_simple = ahora;
+                                    }
                                 }
                                 
                                 // Para eventos largos, usamos tarea separada
-                                if (tipo_evento != BOTON_PULSACION_SIMPLE) {
+                                if (tipo_evento != BOTON_PULSACION_SIMPLE && tipo_evento != BOTON_DOBLE_PULSACION) {
                                     tipo_evento_boton_t *evento_copia = malloc(sizeof(tipo_evento_boton_t));
                                     
                                     if (evento_copia) {
