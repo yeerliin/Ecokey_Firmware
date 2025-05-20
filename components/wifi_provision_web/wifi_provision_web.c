@@ -212,7 +212,15 @@ esp_err_t wifi_provision_web_start(const wifi_prov_web_config_t *config)
 
     // Inicializar los componentes de red necesarios
     ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    
+    // Verifica si ya existe un event loop antes de crearlo
+    esp_err_t err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        // Solo reporta error si es diferente a ESP_ERR_INVALID_STATE
+        // (ESP_ERR_INVALID_STATE significa que ya existe, lo cual es aceptable)
+        ESP_LOGE(TAG, "Error creando event loop: %s", esp_err_to_name(err));
+        return err;
+    }
 
     wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));

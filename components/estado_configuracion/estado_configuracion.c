@@ -1,5 +1,6 @@
 #include "estado_configuracion.h"
 #include "esp_log.h"
+#include "esp_event.h"  // Añadir esta línea para esp_event_loop_delete_default()
 #include <stdbool.h>  // Añadido para tipos bool, true, false
 #include "app_control.h"
 #include "freertos/FreeRTOS.h"
@@ -99,7 +100,7 @@ esp_err_t estado_configuracion_iniciar(void) {
     return ESP_OK;
 }
 
-    esp_err_t estado_configuracion_detener(void) {
+esp_err_t estado_configuracion_detener(void) {
     if (!estado_activo) {
         ESP_LOGW(TAG, "Estado configuración no está activo");
         return ESP_OK;
@@ -113,7 +114,11 @@ esp_err_t estado_configuracion_iniciar(void) {
     } else {
         ESP_LOGW(TAG, "El portal de provisioning no está activo");
     }
-        // Detener parpadeo del LED
+    
+    // Asegúrate de eliminar el event loop antes de salir
+    esp_event_loop_delete_default();
+    
+    // Detener parpadeo del LED
     led_blink_stop();
 
     estado_activo = false;
