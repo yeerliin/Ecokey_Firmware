@@ -12,10 +12,10 @@
 static const char *TAG = "ESTADO_AUTO";
 static bool estado_activo = false;
 static TaskHandle_t automatico_task_handle = NULL;
+static volatile uint32_t automatico_timeout_ms = 10 * 60 * 1000; // 10 minutos por defecto
 
 // Configuración
 #define AUTOMATICO_TASK_PERIOD_MS 500
-#define AUTOMATICO_TIMEOUT_MS     10000
 #define BLE_TARGET_INDEX          0  // Usar el índice 0 para la MAC objetivo
 
 static void automatico_task(void *param) {
@@ -26,6 +26,8 @@ static void automatico_task(void *param) {
         bool detectado = ble_scanner_tag_detectado(BLE_TARGET_INDEX);
         int64_t now = esp_timer_get_time() / 1000; // ms
 
+        uint32_t timeout_ms = automatico_timeout_ms; // leer valor actual
+
         if (detectado) {
             last_detected_time = now;
             if (!rele_activado) {
@@ -34,10 +36,10 @@ static void automatico_task(void *param) {
                 ESP_LOGI(TAG, "Relé activado por detección BLE");
             }
         } else {
-            if (rele_activado && (now - last_detected_time > AUTOMATICO_TIMEOUT_MS)) {
+            if (rele_activado && (now - last_detected_time > timeout_ms)) {
                 relay_controller_deactivate();
                 rele_activado = false;
-                ESP_LOGI(TAG, "Relé desactivado por ausencia de BLE >10s");
+                ESP_LOGI(TAG, "Relé desactivado por ausencia de BLE >%lu ms", timeout_ms);
             }
         }
 
@@ -85,11 +87,31 @@ esp_err_t estado_automatico_iniciar(void) {
         ESP_LOGE(TAG, "Error al iniciar escáner BLE: %s", esp_err_to_name(err));
         return ESP_FAIL;
     }
+
+    // Recuperar el temporizador desde NVS (en minutos)
+    char temporizador_str[8] = {0};
+    int minutos = 10; // valor por defecto
+    err = nvs_manager_get_string("temporizador", temporizador_str, sizeof(temporizador_str));
+    if (err == ESP_OK) {
+        int temp = atoi(temporizador_str);
+        if (temp >= 1 && temp <= 30) {
+            minutos = temp;
+        } else {
+            ESP_LOGW(TAG, "Valor de temporizador fuera de rango (%d), usando 10 min por defecto", temp);
+        }
+    } else {
+        ESP_LOGW(TAG, "No se pudo recuperar temporizador, usando 10 min por defecto");
+    }
+    uint32_t timeout_ms = (uint32_t)minutos * 60 * 1000; // convertir minutos a ms
+    automatico_timeout_ms = timeout_ms;
+
+    ESP_LOGI(TAG, "Timeout de ausencia BLE configurado en %d minutos (%lu ms)", minutos, timeout_ms);
+
     estado_activo = true;
 
     if (automatico_task_handle == NULL) {
         BaseType_t res = xTaskCreate(
-            automatico_task, "automatico_task", 2048, NULL, 5, &automatico_task_handle
+            automatico_task, "automatico_task", 4096, NULL, 5, &automatico_task_handle
         );
         if (res != pdPASS) {
             ESP_LOGE(TAG, "Error al crear la tarea automática");
@@ -119,4 +141,24 @@ esp_err_t estado_automatico_detener(void) {
     ble_scanner_deinicializar();
 
     return ESP_OK;
+}
+
+// (Opcional) Función para actualizar el timeout desde otro componente (ej: MQTT)
+void estado_automatico_set_timeout_minutos(uint32_t minutos) {
+    if (minutos < 1) minutos = 1;
+    if (minutos > 30) minutos = 30;
+    automatico_timeout_ms = minutos * 60 * 1000;
+    ESP_LOGI(TAG, "Timeout actualizado dinámicamente a %lu minutos (%lu ms)", minutos, automatico_timeout_ms);
+
+    // Guardar en NVS para persistencia tras reinicio
+    char temp_str[8];
+    snprintf(temp_str, sizeof(temp_str), "%lu", minutos);
+    esp_err_t err = nvs_manager_set_string("temporizador", temp_str);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "No se pudo guardar el nuevo timeout en NVS: %s", esp_err_to_name(err));
+    }
+}
+
+uint32_t estado_automatico_get_timeout_minutos(void) {
+    return automatico_timeout_ms / 60000;
 }
