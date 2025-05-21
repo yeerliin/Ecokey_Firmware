@@ -1,48 +1,48 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- |
+| Dispositivos Compatibles | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
+| ------------------------ | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- |
 
-# ESP-MQTT SSL Sample application
+# Aplicación de ejemplo ESP-MQTT SSL
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+(Consulte el archivo README.md en el directorio de nivel superior 'examples' para más información sobre los ejemplos.)
 
-This example connects to the broker mqtt.eclipseprojects.io using ssl transport and as a demonstration subscribes/unsubscribes and send a message on certain topic.
-(Please note that the public broker is maintained by the community so may not be always available, for details please see this [disclaimer](https://iot.eclipse.org/getting-started/#sandboxes))
+Este ejemplo se conecta al broker mqtt.eclipseprojects.io usando transporte ssl y como demostración se suscribe/desuscribe y envía un mensaje en un tema determinado.
+(Tenga en cuenta que el broker público es mantenido por la comunidad, por lo que puede no estar siempre disponible, para más detalles consulte este [aviso legal](https://iot.eclipse.org/getting-started/#sandboxes))
 
-It uses ESP-MQTT library which implements mqtt client to connect to mqtt broker.
+Utiliza la biblioteca ESP-MQTT que implementa un cliente mqtt para conectarse a un broker mqtt.
 
-## How to use example
+## Cómo usar el ejemplo
 
-### Hardware Required
+### Hardware Requerido
 
-This example can be executed on any ESP32 board, the only required interface is WiFi and connection to internet.
+Este ejemplo puede ejecutarse en cualquier placa ESP32, la única interfaz requerida es WiFi y conexión a Internet.
 
-### Configure the project
+### Configurar el proyecto
 
-* Open the project configuration menu (`idf.py menuconfig`)
-* Configure Wi-Fi or Ethernet under "Example Connection Configuration" menu. See "Establishing Wi-Fi or Ethernet Connection" section in [examples/protocols/README.md](../../README.md) for more details.
+* Abra el menú de configuración del proyecto (`idf.py menuconfig`)
+* Configure Wi-Fi o Ethernet en el menú "Example Connection Configuration". Consulte la sección "Estableciendo conexión Wi-Fi o Ethernet" en [examples/protocols/README.md](../../README.md) para más detalles.
 
-PEM certificate for this example could be extracted from an openssl `s_client` command connecting to mqtt.eclipseprojects.io.
-In case a host operating system has `openssl` and `sed` packages installed, one could execute the following command to download and save the root certificate to a file (Note for Windows users: Both Linux like environment or Windows native packages may be used).
+El certificado PEM para este ejemplo podría extraerse de un comando `s_client` de openssl conectándose a mqtt.eclipseprojects.io.
+En caso de que el sistema operativo host tenga instalados los paquetes `openssl` y `sed`, se podría ejecutar el siguiente comando para descargar y guardar el certificado raíz en un archivo (Nota para usuarios de Windows: Se pueden usar tanto entornos tipo Linux como paquetes nativos de Windows).
 ```
 echo "" | openssl s_client -showcerts -connect mqtt.eclipseprojects.io:8883 | sed -n "1,/Root/d; /BEGIN/,/END/p" | openssl x509 -outform PEM >mqtt_eclipse_org.pem
 ```
-Please note that this is not a general command for downloading a root certificate for an arbitrary host;
-this command works with mqtt.eclipseprojects.io as the site provides root certificate in the chain, which then could be extracted
-with text operation.
+Tenga en cuenta que este no es un comando general para descargar un certificado raíz para un host arbitrario;
+este comando funciona con mqtt.eclipseprojects.io ya que el sitio proporciona el certificado raíz en la cadena, que luego podría extraerse
+con operaciones de texto.
 
-### Build and Flash
+### Compilar y Flashear
 
-Build the project and flash it to the board, then run monitor tool to view serial output:
+Compile el proyecto y flashéelo en la placa, luego ejecute la herramienta de monitoreo para ver la salida serial:
 
 ```
-idf.py -p PORT flash monitor
+idf.py -p PUERTO flash monitor
 ```
 
-(To exit the serial monitor, type ``Ctrl-]``.)
+(Para salir del monitor serial, escriba ``Ctrl-]``.)
 
-See the Getting Started Guide for full steps to configure and use ESP-IDF to build projects.
+Consulte la Guía de Inicio para conocer los pasos completos para configurar y usar ESP-IDF para construir proyectos.
 
-## Example Output
+## Salida de ejemplo
 
 ```
 I (3714) event: sta ip: 192.168.0.139, mask: 255.255.255.0, gw: 192.168.0.2

@@ -1,10 +1,10 @@
-/* MQTT (over TCP) Example
+/* Ejemplo MQTT (sobre TCP)
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
+   Este código de ejemplo está en el Dominio Público (o con licencia CC0, a su elección).
 
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
+   A menos que sea requerido por la ley aplicable o acordado por escrito, este
+   software se distribuye "TAL CUAL", SIN GARANTÍAS NI
+   CONDICIONES DE NINGÚN TIPO, ya sean expresas o implícitas.
 */
 
 #include <stdio.h>
@@ -27,23 +27,23 @@ static const char *TAG = "mqtt_example";
 static void log_error_if_nonzero(const char *message, int error_code)
 {
     if (error_code != 0) {
-        ESP_LOGE(TAG, "Last error %s: 0x%x", message, error_code);
+        ESP_LOGE(TAG, "Último error %s: 0x%x", message, error_code);
     }
 }
 
 /*
- * @brief Event handler registered to receive MQTT events
+ * @brief Manejador de eventos registrado para recibir eventos MQTT
  *
- *  This function is called by the MQTT client event loop.
+ *  Esta función es llamada por el bucle de eventos del cliente MQTT.
  *
- * @param handler_args user data registered to the event.
- * @param base Event base for the handler(always MQTT Base in this example).
- * @param event_id The id for the received event.
- * @param event_data The data for the event, esp_mqtt_event_handle_t.
+ * @param handler_args datos de usuario registrados para el evento.
+ * @param base Base de eventos para el manejador (siempre MQTT Base en este ejemplo).
+ * @param event_id El id para el evento recibido.
+ * @param event_data Los datos para el evento, esp_mqtt_event_handle_t.
  */
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
+    ESP_LOGD(TAG, "Evento despachado desde el bucle de eventos base=%s, event_id=%" PRIi32 "", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
     int msg_id;
@@ -51,16 +51,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
         msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+        ESP_LOGI(TAG, "envío de publicación exitoso, msg_id=%d", msg_id);
 
         msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+        ESP_LOGI(TAG, "envío de suscripción exitoso, msg_id=%d", msg_id);
 
         msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+        ESP_LOGI(TAG, "envío de suscripción exitoso, msg_id=%d", msg_id);
 
         msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-        ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
+        ESP_LOGI(TAG, "envío de desuscripción exitoso, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -69,7 +69,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
         msg_id = esp_mqtt_client_publish(client, "/topic/qos0", "data", 0, 0, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+        ESP_LOGI(TAG, "envío de publicación exitoso, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_UNSUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
@@ -85,15 +85,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
         if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-            log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
-            log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
-            log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
-            ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+            log_error_if_nonzero("reportado desde esp-tls", event->error_handle->esp_tls_last_esp_err);
+            log_error_if_nonzero("reportado desde la pila tls", event->error_handle->esp_tls_stack_err);
+            log_error_if_nonzero("capturado como errno del socket de transporte",  event->error_handle->esp_transport_sock_errno);
+            ESP_LOGI(TAG, "Última cadena de errno (%s)", strerror(event->error_handle->esp_transport_sock_errno));
 
         }
         break;
     default:
-        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
+        ESP_LOGI(TAG, "Otro id de evento:%d", event->event_id);
         break;
     }
 }
@@ -108,7 +108,7 @@ static void mqtt_app_start(void)
 
     if (strcmp(mqtt_cfg.broker.address.uri, "FROM_STDIN") == 0) {
         int count = 0;
-        printf("Please enter url of mqtt broker\n");
+        printf("Por favor, introduzca la url del broker mqtt\n");
         while (count < 128) {
             int c = fgetc(stdin);
             if (c == '\n') {
@@ -121,24 +121,24 @@ static void mqtt_app_start(void)
             vTaskDelay(10 / portTICK_PERIOD_MS);
         }
         mqtt_cfg.broker.address.uri = line;
-        printf("Broker url: %s\n", line);
+        printf("URL del broker: %s\n", line);
     } else {
-        ESP_LOGE(TAG, "Configuration mismatch: wrong broker url");
+        ESP_LOGE(TAG, "Discrepancia de configuración: url de broker incorrecta");
         abort();
     }
 #endif /* CONFIG_BROKER_URL_FROM_STDIN */
 
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
+    /* El último argumento puede usarse para pasar datos al manejador de eventos, en este ejemplo mqtt_event_handler */
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
 }
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
-    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
+    ESP_LOGI(TAG, "[APP] Iniciando..");
+    ESP_LOGI(TAG, "[APP] Memoria libre: %" PRIu32 " bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "[APP] Versión IDF: %s", esp_get_idf_version());
 
     esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set("mqtt_client", ESP_LOG_VERBOSE);
@@ -152,9 +152,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
+    /* Esta función auxiliar configura Wi-Fi o Ethernet, según se seleccione en menuconfig.
+     * Lea la sección "Estableciendo conexión Wi-Fi o Ethernet" en
+     * examples/protocols/README.md para más información sobre esta función.
      */
     ESP_ERROR_CHECK(example_connect());
 

@@ -1,40 +1,40 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- |
+| Dispositivos Compatibles | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
+| ------------------------ | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- |
 
-# ESP-MQTT sample application
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+# Aplicación de ejemplo ESP-MQTT
+(Consulte el archivo README.md en el directorio de nivel superior 'examples' para más información sobre los ejemplos).
 
-This example connects to the broker URI selected using `idf.py menuconfig` (using mqtt tcp transport) and as a demonstration subscribes/unsubscribes and send a message on certain topic.
-(Please note that the public broker is maintained by the community so may not be always available, for details please see this [disclaimer](https://iot.eclipse.org/getting-started/#sandboxes))
+Este ejemplo se conecta al broker URI seleccionado usando `idf.py menuconfig` (utilizando transporte tcp mqtt) y como demostración se suscribe/desuscribe y envía un mensaje en un tema determinado.
+(Tenga en cuenta que el broker público es mantenido por la comunidad, por lo que puede no estar siempre disponible; para más detalles, consulte este [aviso legal](https://iot.eclipse.org/getting-started/#sandboxes))
 
-Note: If the URI equals `FROM_STDIN` then the broker address is read from stdin upon application startup (used for testing)
+Nota: Si la URI es igual a `FROM_STDIN`, entonces la dirección del broker se lee desde stdin al iniciar la aplicación (usado para pruebas)
 
-It uses ESP-MQTT library which implements mqtt client to connect to mqtt broker.
+Utiliza la biblioteca ESP-MQTT que implementa un cliente mqtt para conectarse al broker mqtt.
 
-## How to use example
+## Cómo usar el ejemplo
 
-### Hardware Required
+### Hardware requerido
 
-This example can be executed on any ESP32 board, the only required interface is WiFi and connection to internet.
+Este ejemplo puede ejecutarse en cualquier placa ESP32, las únicas interfaces requeridas son WiFi y conexión a Internet.
 
-### Configure the project
+### Configurar el proyecto
 
-* Open the project configuration menu (`idf.py menuconfig`)
-* Configure Wi-Fi or Ethernet under "Example Connection Configuration" menu. See "Establishing Wi-Fi or Ethernet Connection" section in [examples/protocols/README.md](../../README.md) for more details.
+* Abra el menú de configuración del proyecto (`idf.py menuconfig`)
+* Configure Wi-Fi o Ethernet en el menú "Example Connection Configuration". Consulte la sección "Estableciendo conexión Wi-Fi o Ethernet" en [examples/protocols/README.md](../../README.md) para más detalles.
 
-### Build and Flash
+### Compilar y Flashear
 
-Build the project and flash it to the board, then run monitor tool to view serial output:
+Compile el proyecto y flashéelo en la placa, luego ejecute la herramienta de monitoreo para ver la salida serial:
 
 ```
-idf.py -p PORT flash monitor
+idf.py -p PUERTO flash monitor
 ```
 
-(To exit the serial monitor, type ``Ctrl-]``.)
+(Para salir del monitor serial, escriba ``Ctrl-]``).
 
-See the Getting Started Guide for full steps to configure and use ESP-IDF to build projects.
+Consulte la Guía de Inicio para conocer los pasos completos para configurar y usar ESP-IDF para construir proyectos.
 
-## Example Output
+## Salida de ejemplo
 
 ```
 I (3714) event: sta ip: 192.168.0.139, mask: 255.255.255.0, gw: 192.168.0.2
@@ -60,22 +60,22 @@ TOPIC=/topic/qos0
 DATA=data
 ```
 
-## Using Wi-Fi connection with ESP32P4
+## Uso de conexión Wi-Fi con ESP32P4
 
-It is possible to use Wi-Fi connection on targets that do not support native Wi-Fi peripheral. This example demonstrates using `esp_wifi_remote` on ESP32P4 in the test configuration defined as `sdkconfig.ci.p4_wifi`. This configuration requires another ESP target with native Wi-Fi support physically connected to the ESP32-P4.
+Es posible utilizar conexión Wi-Fi en dispositivos que no soportan periféricos Wi-Fi nativos. Este ejemplo demuestra el uso de `esp_wifi_remote` en ESP32P4 en la configuración de prueba definida como `sdkconfig.ci.p4_wifi`. Esta configuración requiere otro dispositivo ESP con soporte Wi-Fi nativo conectado físicamente al ESP32-P4.
 
-This uses [esp_hosted](https://components.espressif.com/components/espressif/esp_hosted) project by default, please refer to its documentation for more details.
-Note, that `esp_hosted` library currently transmits Wi-Fi credentials in plain text. In case this is a concern, please choose the `eppp` option in `esp_wifi_remote` configuration menu (`CONFIG_ESP_WIFI_REMOTE_LIBRARY_EPPP=y`) and setup master-slave verification (please see [eppp: Configure master-slave verification](#eppp)).
+Este utiliza el proyecto [esp_hosted](https://components.espressif.com/components/espressif/esp_hosted) por defecto, consulte su documentación para más detalles.
+Tenga en cuenta que la biblioteca `esp_hosted` actualmente transmite las credenciales Wi-Fi en texto plano. Si esto es preocupante, elija la opción `eppp` en el menú de configuración `esp_wifi_remote` (`CONFIG_ESP_WIFI_REMOTE_LIBRARY_EPPP=y`) y configure la verificación maestro-esclavo (consulte [eppp: Configurar verificación maestro-esclavo](#eppp)).
 
-### esp-hosted: Configure the slave project
+### esp-hosted: Configurar el proyecto esclavo
 
-You first need to build and flash the slave project. It's possible to perform this action directly from the host project, these commands can be used to set the slave target device (for example ESP32C6), build and flash the slave project. You will have to hold the RST button to keep the host device (ESP32-P4) in reset while flashing the slave device.
+Primero debe compilar y flashear el proyecto esclavo. Es posible realizar esta acción directamente desde el proyecto host, estos comandos pueden usarse para establecer el dispositivo esclavo (por ejemplo, ESP32C6), compilar y flashear el proyecto esclavo. Deberá mantener presionado el botón RST para mantener el dispositivo host (ESP32-P4) en reset mientras flashea el dispositivo esclavo.
 ```
 idf.py -C managed_components/espressif__esp_hosted/slave/ -B build_slave set-target esp32c6
 idf.py -C managed_components/espressif__esp_hosted/slave/ -B build_slave build flash monitor
 ```
 
-### esp-hosted: Example Output of the slave device
+### esp-hosted: Salida de ejemplo del dispositivo esclavo
 
 ```
 I (348) cpu_start: Unicore app
@@ -130,7 +130,7 @@ I (1165) fg_mcu_slave: Initial set up done
 I (1165) slave_ctrl: event ESPInit
 ```
 
-### esp_hosted: Example Output of the master device (ESP32-P4)
+### esp_hosted: Salida de ejemplo del dispositivo maestro (ESP32-P4)
 
 ```
 I (1833) sdio_wrapper: Function 0 Blocksize: 512
@@ -207,48 +207,48 @@ TOPIC=/topic/qos0
 DATA=data
 ```
 
-### <a name="eppp"></a>eppp: Configure master-slave verification
+### <a name="eppp"></a>eppp: Configurar verificación maestro-esclavo
 
-In order to secure the physical connection between the ESP32-P4 (master) and the slave device, it is necessary to set certificates and keys for each side.
-To bootstrap this step, you can use one-time generated self-signed RSA keys and certificates running:
+Para asegurar la conexión física entre el ESP32-P4 (maestro) y el dispositivo esclavo, es necesario establecer certificados y claves para cada lado.
+Para iniciar este paso, puede usar claves RSA autofirmadas generadas una sola vez ejecutando:
 ```
 ./managed_components/espressif__esp_wifi_remote/examples/test_certs/generate_test_certs.sh espressif.local
 ```
 
-#### eppp: Configure the slave project
+#### eppp: Configurar el proyecto esclavo
 
-It is recommended to create a new project from `esp_wifi_remote` component's example with
+Se recomienda crear un nuevo proyecto a partir del ejemplo del componente `esp_wifi_remote` con
 ```
 idf.py create-project-from-example "espressif/esp_wifi_remote:server"
 ```
-but you can also build and flash the slave project directly from the `managed_components` directory using:
+pero también puede compilar y flashear el proyecto esclavo directamente desde el directorio `managed_components` usando:
 ```
 idf.py -C managed_components/espressif__esp_wifi_remote/examples/server/ -B build_slave 
 ```
 
-Please follow these steps to setup the slave application:
-* `idf.py set-target` -- choose the slave target (must support Wi-Fi)
-* `idf.py menuconfig` -- configure the physical connection and verification details:
-  - `CONFIG_ESP_WIFI_REMOTE_EPPP_CLIENT_CA` -- CA for verifying ESP32-P4 application
-  - `CONFIG_ESP_WIFI_REMOTE_EPPP_SERVER_CRT` -- slave's certificate
-  - `CONFIG_ESP_WIFI_REMOTE_EPPP_SERVER_KEY` -- slave's private key
+Siga estos pasos para configurar la aplicación esclava:
+* `idf.py set-target` -- elija el objetivo esclavo (debe soportar Wi-Fi)
+* `idf.py menuconfig` -- configure la conexión física y los detalles de verificación:
+  - `CONFIG_ESP_WIFI_REMOTE_EPPP_CLIENT_CA` -- CA para verificar la aplicación ESP32-P4
+  - `CONFIG_ESP_WIFI_REMOTE_EPPP_SERVER_CRT` -- certificado del esclavo
+  - `CONFIG_ESP_WIFI_REMOTE_EPPP_SERVER_KEY` -- clave privada del esclavo
 * `idf.py build flash monitor`
 
-#### eppp: Configure the master project (ESP32-P4)
+#### eppp: Configurar el proyecto maestro (ESP32-P4)
 
-similarly to the slave project, we have to configure
-* the physical connection
-* the verification
-  - `CONFIG_ESP_WIFI_REMOTE_EPPP_SERVER_CA` -- CA for verifying the slave application
-  - `CONFIG_ESP_WIFI_REMOTE_EPPP_CLIENT_CRT` -- our own certificate
-  - `CONFIG_ESP_WIFI_REMOTE_EPPP_CLIENT_KEY` -- our own private key
+de manera similar al proyecto esclavo, tenemos que configurar
+* la conexión física
+* la verificación
+  - `CONFIG_ESP_WIFI_REMOTE_EPPP_SERVER_CA` -- CA para verificar la aplicación esclava
+  - `CONFIG_ESP_WIFI_REMOTE_EPPP_CLIENT_CRT` -- nuestro propio certificado
+  - `CONFIG_ESP_WIFI_REMOTE_EPPP_CLIENT_KEY` -- nuestra propia clave privada
 
-After project configuration, you build and flash the board with
+Después de la configuración del proyecto, compile y flashee la placa con
 ```
 idf.py build flash monitor
 ```
 
-### eppp: Example Output of the slave device
+### eppp: Salida de ejemplo del dispositivo esclavo
 
 ```
 I (7982) main_task: Returned from app_main()
@@ -326,7 +326,7 @@ I (15682) rpc_server: Main DNS:185.162.24.55
 I (15682) rpc_server: IP address:192.168.0.33
 ```
 
-### eppp: Example Output of the master device (ESP32-P4)
+### eppp: Salida de ejemplo del dispositivo maestro (ESP32-P4)
 
 ```
 I (445) example_connect: Start example_connect.
