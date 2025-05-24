@@ -44,17 +44,6 @@ esp_err_t inicializar_componentes(void)
 
     // Pausa corta
     vTaskDelay(pdMS_TO_TICKS(100));
-    
-    /*/ 5. Inicializar BLE Scanner
-    ESP_LOGI(TAG, "Inicializando escáner BLE...");
-    ret = ble_scanner_iniciar(NULL);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error crítico al inicializar el escáner BLE: %s", esp_err_to_name(ret));
-        return ret;
-    }*/
-    // Pausa corta
-    vTaskDelay(pdMS_TO_TICKS(100));
-
          
     // 6. Inicializar el control boton (solo inicialización interna)
     ESP_LOGI(TAG, "Inicializando control por boton...");
@@ -66,14 +55,6 @@ esp_err_t inicializar_componentes(void)
 
     // Pausa corta
     vTaskDelay(pdMS_TO_TICKS(100));
-
-    // 7. Inicializar el controlador de aplicación (solo inicialización interna)
-    ESP_LOGI(TAG, "Inicializando controlador de aplicación...");
-    ret = app_control_iniciar_estado();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error al inicializar el controlador de aplicación: %s", esp_err_to_name(ret));
-        return ret;
-    }
 
     ESP_LOGI(TAG, "Todos los componentes inicializados correctamente");
     return ESP_OK;
