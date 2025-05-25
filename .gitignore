@@ -1553,8 +1553,5 @@ build/log/idf_py_stderr_output_23136
 build/log/idf_py_stdout_output_22264
 build/log/idf_py_stdout_output_23136
 build/partition_table/partition-table.bin
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/settings.json
 .devcontainer/devcontainer.json
 .devcontainer/Dockerfile
