@@ -1590,3 +1590,4 @@ build/esp-idf/mbedtls/mbedtls/library/CMakeFiles/mbedtls.dir/C_/Users/yeerl/esp/
 build/esp-idf/newlib/CMakeFiles/__idf_newlib.dir/port/xtensa/stdatomic_s32c1i.c.obj
 build/esp-idf/wifi_provision_web/libwifi_provision_web.a
 build/esp-idf/wifi_provision_web/CMakeFiles/__idf_wifi_provision_web.dir/wifi_provision_web.c.obj
+/build
