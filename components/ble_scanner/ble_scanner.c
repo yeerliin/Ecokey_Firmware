@@ -140,7 +140,8 @@ static void detection_task(void *param)
         if (xQueueReceive(s_detection_queue, &info, portMAX_DELAY))
         {
             // Solo loguear la PRIMERA vez que se detecta el tag
-            if (!tag_reportado[info.target_idx]) {
+            if (!tag_reportado[info.target_idx])
+            {
                 tag_reportado[info.target_idx] = true;
                 ESP_LOGI(TAG, "MAC detectada: #%d con RSSI: %d", info.target_idx, info.rssi);
                 ESP_LOGI(TAG, "✅ Tag #%d detectado! MAC: %02X:%02X:%02X:%02X:%02X:%02X",
@@ -235,6 +236,14 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
         return ESP_ERR_INVALID_STATE;
     }
 
+    //  Recomendado: liberar memoria de BT Classic si aún no se ha hecho
+    esp_err_t ret = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGE(TAG, "Error al liberar memoria BT Classic: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
     // Aplicar configuración personalizada o usar valores por defecto
     if (config != NULL)
     {
@@ -247,15 +256,8 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
 
     ESP_LOGI(TAG, "Inicializando BLE Scanner...");
 
-    // NOTA: Asumimos que NVS ya está inicializado externamente
-
-    // Resetear variables de estado
     s_host_sincronizado = false;
 
-    // Limpiar la lista de MACs objetivo
-    //memset(s_targets, 0, sizeof(s_targets));
-
-    // Crear cola para procesamiento de detecciones
     if (s_detection_queue == NULL)
     {
         s_detection_queue = xQueueCreate(10, sizeof(detection_info_t));
@@ -265,11 +267,10 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
             return ESP_ERR_NO_MEM;
         }
 
-        // Crear tarea para procesar detecciones
         BaseType_t res = xTaskCreate(
             detection_task,
             "ble_detection",
-            4096, // <-- Aumentar stack de 2048 a 4096 bytes
+            4096,
             NULL,
             5,
             NULL);
@@ -283,25 +284,19 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
         }
     }
 
-    // Configurar callback para cuando el host esté listo
     ble_hs_cfg.sync_cb = on_ble_host_sync;
 
-    // Inicializar NimBLE
-    esp_err_t ret = nimble_port_init();
+    ret = nimble_port_init();
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Error al inicializar NimBLE: %d", ret);
         return ESP_FAIL;
     }
 
-    // Iniciar la tarea del host BLE con prioridad alta para callback rápido
     nimble_port_freertos_init(ble_host_task);
 
-    // Ahora sí marcamos como inicializado
     s_inicializado = true;
 
-    // Si el host ya se sincronizó (poco probable pero posible),
-    // iniciar el escaneo inmediatamente
     if (s_host_sincronizado)
     {
         ESP_LOGI(TAG, "Host ya sincronizado, iniciando escaneo inmediatamente");
@@ -310,13 +305,13 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
         {
             ESP_LOGW(TAG, "Error al iniciar escaneo, se intentará más tarde: %s",
                      esp_err_to_name(ret));
-            // No consideramos esto un error fatal
         }
     }
 
     ESP_LOGI(TAG, "BLE scanner inicializado con éxito");
     return ESP_OK;
 }
+
 
 esp_err_t ble_scanner_deinicializar(void)
 {
