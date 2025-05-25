@@ -1559,6 +1559,7 @@ build/partition_table/partition-table.bin
 .devcontainer/devcontainer.json
 .devcontainer/Dockerfile
 build/
+/build
 build/.ninja_lock
 build/esp-idf/esp_psram/libesp_psram.a
 build/esp-idf/esp_psram/CMakeFiles/__idf_esp_psram.dir/esp_psram.c.obj
@@ -1591,3 +1592,10 @@ build/esp-idf/newlib/CMakeFiles/__idf_newlib.dir/port/xtensa/stdatomic_s32c1i.c.
 build/esp-idf/wifi_provision_web/libwifi_provision_web.a
 build/esp-idf/wifi_provision_web/CMakeFiles/__idf_wifi_provision_web.dir/wifi_provision_web.c.obj
 /build
+build/esp-idf/esp_psram/libesp_psram.a
+build/esp-idf/esp_psram/CMakeFiles/__idf_esp_psram.dir/esp_psram.c.obj
+build/esp-idf/esp_psram/CMakeFiles/__idf_esp_psram.dir/mmu_psram_flash.c.obj
+build/esp-idf/esp_psram/CMakeFiles/__idf_esp_psram.dir/device/esp_psram_impl_ap_quad.c.obj
+build/esp-idf/newlib/CMakeFiles/__idf_newlib.dir/port/xtensa/stdatomic_s32c1i.c.obj
+build/esp-idf/wifi_provision_web/libwifi_provision_web.a
+build/esp-idf/wifi_provision_web/CMakeFiles/__idf_wifi_provision_web.dir/wifi_provision_web.c.obj
