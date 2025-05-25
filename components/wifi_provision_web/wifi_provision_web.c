@@ -100,7 +100,7 @@ static esp_err_t custom_data_post_handler(httpd_req_t *req)
     ESP_ERROR_CHECK(esp_wifi_connect());
 
     EventBits_t bits = xEventGroupWaitBits(
-        wifi_event_group, WIFI_CONNECTED_EVENT | WIFI_FAIL_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(15000));
+        wifi_event_group, WIFI_CONNECTED_EVENT | WIFI_FAIL_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(7000));
     httpd_resp_set_type(req, "application/json");
     if (bits & WIFI_CONNECTED_EVENT)
     {
