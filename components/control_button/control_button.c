@@ -9,7 +9,6 @@
 #include "estado_manual.h"  // Añadido para acceder a las funciones de estado_manual
 
 static const char *TAG = "CONTROL_BUTTON";
-static estado_app_t estado_anterior = ESTADO_INVALIDO;
 
 // Tipo de función para acciones de pulsaciones
 typedef void (*accion_boton_t)(void);
@@ -51,16 +50,11 @@ static void accion_larga(void)
     estado_app_t actual = app_control_obtener_estado_actual();
 
     if (actual != ESTADO_CONFIGURACION) {
-        estado_anterior = actual;
         ESP_LOGI(TAG, "Larga: cambiando a CONFIGURACION desde %d", actual);
         app_control_lanzar_transicion(ESTADO_CONFIGURACION, TAG);
-    } else if (estado_anterior != ESTADO_INVALIDO) {
-        ESP_LOGI(TAG, "Larga: volviendo a estado %d", estado_anterior);
-        app_control_lanzar_transicion(estado_anterior, TAG);
     } else {
-        ESP_LOGW(TAG, "Por defecto Automatico");
-        app_control_lanzar_transicion(ESTADO_AUTOMATICO, TAG);
-    }
+        ESP_LOGW(TAG, "Tienes que finalizar la configuracion.");
+    }   
 }
 
 static void accion_muy_larga(void)

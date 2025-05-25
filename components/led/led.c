@@ -10,7 +10,7 @@
 
 // Definición interna del GPIO y polaridad del LED
 #define LED_GPIO_NUM GPIO_NUM_4
-#define LED_ACTIVE_HIGH true
+#define LED_ACTIVE_HIGH false
 
 // Variables globales optimizadas
 static const char *TAG = "LED";
