@@ -10,7 +10,7 @@
 static const char *ETIQUETA = "BOTON";
 
 // Configuración fija del botón
-#define BOTON_GPIO              16  // GPIO fijo para el botón (ajustar según sea necesario)
+#define BOTON_GPIO              13  // GPIO fijo para el botón (ajustar según sea necesario)
 #define BOTON_NIVEL_ACTIVO      false  // false = activo en bajo (pull-up)
 
 // Tiempos predeterminados
