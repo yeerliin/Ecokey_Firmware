@@ -16,7 +16,6 @@
 #include <string.h> 
 // Inclusión para usar colas de FreeRTOS
 #include "freertos/queue.h"
-#include "wifi_sta.h"
 
 // Etiqueta para los mensajes de log de este módulo
 static const char *TAG = "APP_CONTROL";
@@ -155,6 +154,7 @@ esp_err_t app_control_cambiar_estado(estado_app_t nuevo_estado) {
     }
 
     // Actualiza la variable de estado actual y registra el cambio
+    estado_app_t estado_anterior = estado_actual;
     estado_actual = nuevo_estado;
     
     // Guarda el nuevo estado en almacenamiento persistente
@@ -225,20 +225,12 @@ esp_err_t app_control_iniciar_estado(void) {
     uint8_t estado_nvs = nvs_manager_get_u8(NVS_KEY_ESTADO, ESTADO_INVALIDO);
     estado_app_t estado = (estado_app_t)estado_nvs;
 
-    // Verificar si existen credenciales WiFi
-    if (!nvs_manager_has_wifi_credentials()) {
-        ESP_LOGI(TAG, LOG_PREFIX_BOOT "Iniciando con estado CONFIGURACION");
+    if (estado == ESTADO_INVALIDO) {
+        ESP_LOGI(TAG, LOG_PREFIX_BOOT " Primer arranque detectado. Iniciando con estado CONFIGURARACION");
         ret = app_control_cambiar_estado(ESTADO_CONFIGURACION);
     } else {
-        sta_wifi_init();
-        sta_wifi_connect_with_nvs(5000);
-        // Si hay credenciales, restaurar el último estado guardado, excepto si es CONFIGURACION
-        if (estado == ESTADO_CONFIGURACION) {
-            ESP_LOGI(TAG, LOG_PREFIX_BOOT "Estado guardado es CONFIGURACION, iniciando en AUTOMATICO por defecto");
-            estado = ESTADO_AUTOMATICO; // Cambiar a un estado por defecto si es CONFIGURACION
-        }
         const estado_entry_t *entry = buscar_estado_entry(estado);
-        ESP_LOGI(TAG, LOG_PREFIX_BOOT "Restaurando estado guardado: %s (%d)", 
+        ESP_LOGI(TAG, LOG_PREFIX_BOOT " Restaurando estado guardado: %s (%d)", 
                 entry ? entry->nombre : "DESCONOCIDO", estado);
         ret = app_control_cambiar_estado(estado);
     }

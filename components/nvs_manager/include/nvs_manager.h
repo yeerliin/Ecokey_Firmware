@@ -183,41 +183,6 @@ esp_err_t nvs_manager_save_mac(const char *mac);
 
 void info_NVS(void);
 
-/**
- * @brief Verifica si hay credenciales WiFi almacenadas
- * 
- * @return true si existen credenciales WiFi completas
- */
-bool nvs_manager_has_wifi_credentials(void);
-
-/**
- * @brief Obtiene las credenciales WiFi almacenadas
- * 
- * @param ssid Buffer para almacenar el SSID (debe tener al menos 33 bytes)
- * @param ssid_len Tamaño del buffer SSID
- * @param password Buffer para almacenar la contraseña (debe tener al menos 65 bytes)
- * @param password_len Tamaño del buffer contraseña
- * @return esp_err_t ESP_OK si se encontraron credenciales, error en caso contrario
- */
-esp_err_t nvs_manager_get_wifi_credentials(char *ssid, size_t ssid_len, 
-                                          char *password, size_t password_len);
-
-/**
- * @brief Guarda credenciales WiFi en NVS
- * 
- * @param ssid SSID a guardar
- * @param password Contraseña a guardar (puede ser NULL para redes abiertas)
- * @return esp_err_t ESP_OK en caso de éxito
- */
-esp_err_t nvs_manager_save_wifi_credentials(const char *ssid, const char *password);
-
-/**
- * @brief Elimina las credenciales WiFi almacenadas
- * 
- * @return esp_err_t ESP_OK en caso de éxito
- */
-esp_err_t nvs_manager_delete_wifi_credentials(void);
-
 #ifdef __cplusplus
 }
 #endif

@@ -42,15 +42,6 @@ void sta_wifi_deinit(void);
 esp_err_t sta_wifi_connect(const char *ssid, const char *password, uint32_t timeout_ms);
 
 /**
- * @brief Conecta a un AP WiFi usando las credenciales almacenadas en NVS
- * 
- * @param timeout_ms Tiempo de espera en ms (0 = esperar indefinidamente)
- * @return esp_err_t ESP_OK en caso de éxito, 
- *                  ESP_ERR_NOT_FOUND si no hay credenciales guardadas
- */
-esp_err_t sta_wifi_connect_with_nvs(uint32_t timeout_ms);
-
-/**
  * @brief Desconecta del AP actual
  * 
  * @return esp_err_t 

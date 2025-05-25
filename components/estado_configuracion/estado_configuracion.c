@@ -84,8 +84,8 @@ esp_err_t estado_configuracion_iniciar(void) {
     // Configurar el portal web de provisioning
     wifi_prov_web_config_t cfg = {
         .ap_pass = "ecokey123",
-        .ap_channel = 6,
-        .ap_max_conn = 2,
+        .ap_channel = 1,
+        .ap_max_conn = 4,
         .on_provisioned = provision_completed_callback
     };
     

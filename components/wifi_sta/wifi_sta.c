@@ -1,5 +1,4 @@
 #include "wifi_sta.h"
-#include "nvs_manager.h"  // Incluir el gestor de NVS
 #include "esp_wifi.h"
 #include "esp_log.h"
 #include "esp_event.h"
@@ -16,10 +15,6 @@
 #define DEFAULT_MAX_RECONNECT_RETRIES 10        // 0 = infinito
 #define DEFAULT_INITIAL_RECONNECT_INTERVAL 1000 // 1 segundo
 #define DEFAULT_MAX_RECONNECT_INTERVAL 30000    // 30 segundos
-
-// Claves NVS para WiFi
-#define WIFI_NVS_SSID_KEY "ssid"
-#define WIFI_NVS_PASS_KEY "password"
 
 static const char *TAG = "WIFI_STA";
 static bool s_initialized = false;
@@ -511,54 +506,6 @@ esp_err_t sta_wifi_connect(const char *ssid, const char *password, uint32_t time
 
         return ESP_ERR_TIMEOUT;
     }
-}
-
-/**
- * @brief Conecta al WiFi usando credenciales almacenadas en NVS
- * 
- * @param timeout_ms Tiempo de espera en ms (0 = esperar indefinidamente)
- * @return esp_err_t ESP_OK si se conecta correctamente, 
- *                   ESP_ERR_NOT_FOUND si no hay credenciales
- */
-esp_err_t sta_wifi_connect_with_nvs(uint32_t timeout_ms)
-{
-    if (!s_initialized) {
-        ESP_LOGE(TAG, "WiFi no inicializado");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    // Verificar si NVS está inicializado
-    if (!nvs_manager_is_initialized()) {
-        ESP_LOGW(TAG, "NVS no está inicializado, inicializando...");
-        esp_err_t ret = nvs_manager_init(NULL);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Error al inicializar NVS Manager: %s", esp_err_to_name(ret));
-            return ret;
-        }
-    }
-    
-    // Verificar si existen credenciales WiFi
-    if (!nvs_manager_has_wifi_credentials()) {
-        ESP_LOGW(TAG, "No hay credenciales WiFi almacenadas en NVS");
-        return ESP_ERR_NOT_FOUND;
-    }
-    
-    // Buffers para las credenciales
-    char nvs_ssid[33] = {0};
-    char nvs_password[65] = {0};
-    
-    // Obtener credenciales
-    esp_err_t ret = nvs_manager_get_wifi_credentials(nvs_ssid, sizeof(nvs_ssid), 
-                                                    nvs_password, sizeof(nvs_password));
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error al obtener credenciales WiFi: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    ESP_LOGI(TAG, "Conectando con credenciales de NVS. SSID: %s", nvs_ssid);
-    return sta_wifi_connect(nvs_ssid, 
-                          (nvs_password[0] != '\0' ? nvs_password : NULL), 
-                          timeout_ms);
 }
 
 esp_err_t sta_wifi_disconnect(void)
