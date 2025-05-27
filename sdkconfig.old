@@ -559,12 +559,6 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
-# Example Configuration
-#
-CONFIG_BROKER_URL="mqtt://mqtt.eclipseprojects.io"
-# end of Example Configuration
-
-#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
@@ -2398,6 +2392,14 @@ CONFIG_WIFI_PROV_BLE_SEC_CONN=y
 CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 # CONFIG_WIFI_PROV_STA_FAST_SCAN is not set
 # end of Wi-Fi Provisioning Manager
+
+#
+# Example Configuration
+#
+CONFIG_BROKER_URL="mqtt://200.234.232.238:1883"
+CONFIG_MQTT_USERNAME="yerlin"
+CONFIG_MQTT_PASSWORD="yerlin123"
+# end of Example Configuration
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set

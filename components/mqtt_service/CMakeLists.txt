@@ -1,3 +1,3 @@
 idf_component_register(SRCS "mqtt_service.c"
-                      INCLUDE_DIRS "."
-                      REQUIRES nvs_flash esp_event mqtt json esp_netif)
+                      INCLUDE_DIRS "include"
+                      REQUIRES nvs_flash esp_event mqtt json esp_netif wifi_sta)

@@ -2396,7 +2396,9 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 #
 # Example Configuration
 #
-CONFIG_BROKER_URL="mqtt://mqtt.eclipseprojects.io"
+CONFIG_BROKER_URL="mqtt://200.234.232.238:1883"
+CONFIG_MQTT_USERNAME="yerlin"
+CONFIG_MQTT_PASSWORD="yerlin1234"
 # end of Example Configuration
 # end of Component config
 

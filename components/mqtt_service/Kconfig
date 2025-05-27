@@ -10,4 +10,16 @@ menu "Example Configuration"
         bool
         default y if BROKER_URL = "FROM_STDIN"
 
+    config MQTT_USERNAME
+        string "MQTT Username"
+        default "yerlin"
+        help
+            Username for MQTT authentication
+
+    config MQTT_PASSWORD
+        string "MQTT Password"
+        default "yerlin123"
+        help
+            Password for MQTT authentication
+
 endmenu

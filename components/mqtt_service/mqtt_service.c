@@ -11,6 +11,8 @@
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "mqtt_service.h"
+#include "wifi_sta.h"
+#include "stdarg.h"
 
 static const char *TAG = "mqtt_service";
 static esp_mqtt_client_handle_t mqtt_client = NULL;
@@ -72,9 +74,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED:
         // Aquí puedes manejar la lógica después de una conexión exitosa
         // Añadir un funcion para comprobar si es la primera vez que se conecta
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_subscribe(client, "topic/qos0", 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+        /////////////// OBTENER MAC Y PUBLICAR EN TOPICO ////////////////////
+        const char *mac = sta_wifi_get_mac_str();
+        {
+            mqtt_service_enviar_json("dispositivos/nuevo", 2, 1, "mac", mac, "fecha", "12h", NULL);
+        }
+
+        /////////////////////////////////////////////////////////////////
+
         break;
     case MQTT_EVENT_DISCONNECTED:
         // Aquí puedes manejar la reconexión o cualquier otra lógica necesaria
@@ -145,18 +152,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 //========================================================================================================================================================================
 //========================================================================================================================================================================
 
-void mqtt_service_enviar_json_str(const char *topic, const char *json_str) {
-    if (mqtt_client != NULL && topic != NULL && json_str != NULL) {
-        esp_mqtt_client_publish(mqtt_client, topic, json_str, 0, 0, 0);
-    }
-}
 
-void mqtt_service_enviar_dato(const char *topic, const char *valor)
+
+void mqtt_service_enviar_dato(const char *topic, const char *valor, int qos, int retain)
 {
     if (mqtt_client != NULL)
     {
-        int msg_id = esp_mqtt_client_publish(mqtt_client, topic, valor, 0, 0, 0);
-        ESP_LOGI(TAG, "Mensaje enviado al topic %s: %s (ID=%d)", topic, valor, msg_id);
+        int msg_id = esp_mqtt_client_publish(mqtt_client, topic, valor, 0, qos, retain);
+        ESP_LOGI(TAG, "Mensaje enviado al topic %s: %s (ID=%d, QoS=%d, retain=%d)", topic, valor, msg_id, qos, retain);
     }
     else
     {
@@ -179,27 +182,48 @@ int mqtt_service_suscribirse(const char *topic, int qos)
     }
 }
 
-void mqtt_service_enviar_json(const char *topic, const char *clave1, const char *valor1,
-                             const char *clave2, const char *valor2)
+void mqtt_service_enviar_json(const char *topic, int qos, int retain, ...)
 {
     char json_buffer[256];
-    snprintf(json_buffer, sizeof(json_buffer),
-             "{\"%s\":\"%s\",\"%s\":\"%s\"}",
-             clave1, valor1, clave2, valor2);
+    char *ptr = json_buffer;
+    int remaining = sizeof(json_buffer);
+    va_list args;
+    va_start(args, retain);
 
-    mqtt_service_enviar_dato(topic, json_buffer);
+    int written = snprintf(ptr, remaining, "{");
+    ptr += written;
+    remaining -= written;
+
+    int first = 1;
+    const char *clave;
+    while ((clave = va_arg(args, const char *)) != NULL) {
+        const char *valor = va_arg(args, const char *);
+        if (!valor) break;
+        written = snprintf(ptr, remaining, "%s\"%s\":\"%s\"", first ? "" : ",", clave, valor);
+        ptr += written;
+        remaining -= written;
+        first = 0;
+    }
+
+    snprintf(ptr, remaining, "}");
+
+    va_end(args);
+
+    mqtt_service_enviar_dato(topic, json_buffer, qos, retain);
 }
 
 void mqtt_service_start(void)
 {
+    if (mqtt_client != NULL)
+    {
+        ESP_LOGI(TAG, "MQTT service ya iniciado (idempotente)");
+        return;
+    }
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = CONFIG_BROKER_URL,
-        .credentials.username = "yerlin",
-        .credentials.authentication.password = "yerlin1234",
+        .credentials.username = CONFIG_MQTT_USERNAME,
+        .credentials.authentication.password = CONFIG_MQTT_PASSWORD,
     };
-
-//========================================================================================================================================================================
-//========================================================================================================================================================================
 
 #if CONFIG_BROKER_URL_FROM_STDIN
     char line[128];
@@ -239,7 +263,13 @@ void mqtt_service_start(void)
 
 void mqtt_service_stop(void)
 {
-    if (mqtt_client != NULL) {
+    if (mqtt_client == NULL)
+    {
+        ESP_LOGI(TAG, "MQTT service ya detenido (idempotente)");
+        return;
+    }
+    if (mqtt_client != NULL)
+    {
         esp_mqtt_client_stop(mqtt_client);
         esp_mqtt_client_destroy(mqtt_client);
         mqtt_client = NULL;
