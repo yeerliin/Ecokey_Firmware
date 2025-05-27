@@ -32,6 +32,13 @@ esp_err_t sta_wifi_init(void);
 void sta_wifi_deinit(void);
 
 /**
+ * @brief Devuelve un puntero a la MAC del dispositivo en formato string.
+ * @return const char* MAC como string (ej: "AA:BB:CC:DD:EE:FF")
+ */
+const char *sta_wifi_get_mac_str(void);
+const char *sta_wifi_get_mac_clean(void);
+
+/**
  * @brief Conecta a un AP WiFi
  * 
  * @param ssid SSID del AP
@@ -99,6 +106,15 @@ bool sta_wifi_is_reconnecting(void);
  * @param ignore_connection_errors true para ignorar errores temporales
  */
 void sta_wifi_set_ignore_connection_errors(bool ignore_connection_errors);
+
+/**
+ * @brief Obtiene la dirección MAC de la interfaz WiFi
+ * 
+ * @param mac_str Buffer para almacenar la dirección MAC como string
+ * @param len Longitud del buffer
+ * @return esp_err_t 
+ */
+esp_err_t sta_wifi_get_mac(char *mac_str, size_t len);
 
 #ifdef __cplusplus
 }

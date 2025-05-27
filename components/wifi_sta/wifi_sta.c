@@ -28,6 +28,8 @@ static TimerHandle_t s_reconnect_timer = NULL;
 // Información de conexión actual
 static char s_ssid[33] = {0};
 static char s_password[65] = {0};
+static char s_mac_str[18] = {0};      // MAC con dos puntos
+static char s_mac_clean[13] = {0};    // MAC sin dos puntosl y fija
 
 // Configuración de reconexión
 static wifi_sta_reconnect_config_t s_reconnect_config = {
@@ -39,6 +41,17 @@ static wifi_sta_reconnect_config_t s_reconnect_config = {
 // Contador de intentos de reconexión
 static uint8_t s_reconnect_attempts = 0;
 static uint16_t s_current_interval_ms = 0;
+
+esp_err_t sta_wifi_get_mac(char *mac_str, size_t len)
+{
+    if (!mac_str || len < 18) return ESP_ERR_INVALID_ARG;
+    uint8_t mac[6];
+    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, mac);
+    if (err != ESP_OK) return err;
+    snprintf(mac_str, len, "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return ESP_OK;
+}
 
 // Función de intento de reconexión activada por el timer
 static void reconnect_timer_callback(TimerHandle_t timer)
@@ -217,6 +230,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 esp_err_t sta_wifi_init(void)
 {
+    if (s_initialized)
+    {
+        ESP_LOGI(TAG, "WiFi ya inicializado (idempotente)");
+        return ESP_OK;
+    }
+
     esp_err_t ret = ESP_OK;
 
     if (s_initialized)
@@ -331,6 +350,12 @@ void sta_wifi_deinit(void)
 {
     if (!s_initialized)
     {
+        ESP_LOGI(TAG, "WiFi ya está deinicializado (idempotente)");
+        return;
+    }
+
+    if (!s_initialized)
+    {
         return;
     }
 
@@ -392,6 +417,17 @@ esp_err_t sta_wifi_connect(const char *ssid, const char *password, uint32_t time
     {
         ESP_LOGE(TAG, "SSID no válido");
         return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_mac_str[0] == '\0') {
+        uint8_t mac[6];
+        if (esp_wifi_get_mac(WIFI_IF_STA, mac) == ESP_OK) {
+            snprintf(s_mac_str, sizeof(s_mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            // MAC limpia (sin dos puntos)
+            snprintf(s_mac_clean, sizeof(s_mac_clean), "%02X%02X%02X%02X%02X%02X",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        }
     }
 
     // Limpiar bits de eventos previos
@@ -508,12 +544,86 @@ esp_err_t sta_wifi_connect(const char *ssid, const char *password, uint32_t time
     }
 }
 
+<<<<<<< HEAD
+=======
+const char *sta_wifi_get_mac_str(void)
+{
+    return s_mac_str;
+}
+
+const char *sta_wifi_get_mac_clean(void)
+{
+    return s_mac_clean;
+}
+
+/**
+ * @brief Conecta al WiFi usando credenciales almacenadas en NVS
+ * 
+ * @param timeout_ms Tiempo de espera en ms (0 = esperar indefinidamente)
+ * @return esp_err_t ESP_OK si se conecta correctamente, 
+ *                   ESP_ERR_NOT_FOUND si no hay credenciales
+ */
+esp_err_t sta_wifi_connect_with_nvs(uint32_t timeout_ms)
+{
+    if (!s_initialized) {
+        ESP_LOGE(TAG, "WiFi no inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Si ya estamos conectados, no hacemos nada (idempotente)
+    if (s_connected) {
+        ESP_LOGI(TAG, "Ya conectado a WiFi (idempotente)");
+        return ESP_OK;
+    }
+
+    // Verificar si NVS está inicializado
+    if (!nvs_manager_is_initialized()) {
+        ESP_LOGW(TAG, "NVS no está inicializado, inicializando...");
+        esp_err_t ret = nvs_manager_init(NULL);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al inicializar NVS Manager: %s", esp_err_to_name(ret));
+            return ret;
+        }
+    }
+    
+    // Verificar si existen credenciales WiFi
+    if (!nvs_manager_has_wifi_credentials()) {
+        ESP_LOGW(TAG, "No hay credenciales WiFi almacenadas en NVS");
+        return ESP_ERR_NOT_FOUND;
+    }
+    
+    // Buffers para las credenciales
+    char nvs_ssid[33] = {0};
+    char nvs_password[65] = {0};
+    
+    // Obtener credenciales
+    esp_err_t ret = nvs_manager_get_wifi_credentials(nvs_ssid, sizeof(nvs_ssid), 
+                                                    nvs_password, sizeof(nvs_password));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al obtener credenciales WiFi: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ESP_LOGI(TAG, "Conectando con credenciales de NVS. SSID: %s", nvs_ssid);
+    return sta_wifi_connect(nvs_ssid, 
+                          (nvs_password[0] != '\0' ? nvs_password : NULL), 
+                          timeout_ms);
+}
+
+>>>>>>> CorregirWifi
 esp_err_t sta_wifi_disconnect(void)
 {
     if (!s_initialized)
     {
         ESP_LOGE(TAG, "WiFi no inicializado");
         return ESP_ERR_INVALID_STATE;
+    }
+
+    // Si ya estamos desconectados, no hacemos nada (idempotente)
+    if (!s_connected)
+    {
+        ESP_LOGI(TAG, "WiFi ya está desconectado (idempotente)");
+        return ESP_OK;
     }
 
     // Detener cualquier proceso de reconexión
