@@ -1,10 +1,10 @@
-menu "Example Configuration"
+menu "MQTT Configuration"
 
     config BROKER_URL
         string "Broker URL"
-        default "mqtt://mqtt.eclipseprojects.io"
+        default "mqtts://w05a6bdd.ala.eu-central-1.emqxsl.com:8883"
         help
-            URL of the broker to connect to
+            URL of the broker to connect to (mqtt:// o mqtts:// para SSL)
 
     config BROKER_URL_FROM_STDIN
         bool

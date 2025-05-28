@@ -69,3 +69,7 @@ esp_err_t estado_manual_obtener_estado_rele(bool *estado) {
     
     return relay_controller_get_state(estado);
 }
+
+bool estado_manual_esta_activo(void) {
+    return estado_activo;
+}

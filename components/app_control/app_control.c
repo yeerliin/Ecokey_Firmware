@@ -18,6 +18,7 @@
 #include "freertos/queue.h"
 #include "wifi_sta.h"
 #include "mqtt_service.h"
+#include "time_manager.h"
 
 // Etiqueta para los mensajes de log de este módulo
 static const char *TAG = "APP_CONTROL";
@@ -163,6 +164,7 @@ esp_err_t app_control_cambiar_estado(estado_app_t nuevo_estado)
     } else if (nuevo_estado == ESTADO_MANUAL || nuevo_estado == ESTADO_AUTOMATICO) {
         sta_wifi_init(); // idempotente
         sta_wifi_connect_with_nvs(7000);
+        time_manager_init("pool.ntp.org");
         mqtt_service_start(); // idempotente
     }
 

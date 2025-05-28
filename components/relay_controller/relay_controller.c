@@ -3,12 +3,13 @@
 #include "esp_log.h"
 #include "mqtt_service.h"
 #include "wifi_sta.h"
+#include "time_manager.h"
 
 static const char *TAG = "RELAY_CONTROLLER";
 
 // Configuración fija para el relé
-#define RELAY_GPIO_PIN 7        // Pin fijo para el relé
-#define RELAY_ACTIVE_HIGH false // Siempre activo en nivel alto
+#define RELAY_GPIO_PIN 7       // Pin fijo para el relé
+#define RELAY_ACTIVE_HIGH true // Siempre activo en nivel alto
 
 static bool relay_state = false;
 static bool relay_initialized = false;
@@ -63,7 +64,15 @@ esp_err_t relay_controller_activate(void)
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
         snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
-        mqtt_service_enviar_json(topic, 2, 1, "MAC", mac, "Estado", "Encendido", NULL);
+        char fecha_actual[24];
+        if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
+        {
+            mqtt_service_enviar_json(topic, 2, 1, "Estado", "Encendido", "Fecha", fecha_actual, NULL);
+            printf("Fecha actual: %s\n", fecha_actual);
+            // Ejemplo de salida: Fecha actual: 2024-06-10 15:23:45
+            return ESP_OK;
+        }
+        mqtt_service_enviar_json(topic, 2, 1, "Estado", "Encendido", NULL);
         // Evento crítico: activación
     }
 
@@ -86,6 +95,14 @@ esp_err_t relay_controller_deactivate(void)
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
         snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
+        char fecha_actual[24];
+        if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
+        {
+            mqtt_service_enviar_json(topic, 2, 1, "Estado", "Apagado", "Fecha", fecha_actual, NULL);
+            printf("Fecha actual: %s\n", fecha_actual);
+            // Ejemplo de salida: Fecha actual: 2024-06-10 15:23:45
+            return ESP_OK;
+        }
         mqtt_service_enviar_json(topic, 2, 1, "MAC", mac, "Estado", "Apagado", NULL);
         // Evento crítico: desactivación
     }
