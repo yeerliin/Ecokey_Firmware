@@ -26,6 +26,8 @@ extern "C"
      *
      * @param topic  Cadena con el nombre del tópico al que se enviará el mensaje.
      * @param valor  Cadena con el contenido del mensaje a publicar.
+     * @param qos    Nivel de calidad de servicio (0, 1 o 2)
+     * @param retain Indicador de retención (0: no retener, 1: retener)
      */
     void mqtt_service_enviar_dato(const char *topic, const char *valor, int qos, int retain);
 
@@ -53,6 +55,13 @@ extern "C"
      *   SIEMPRE TERMINAR CON NULL PARA INDICAR EL FINAL DE LA LISTA.
      */
     void mqtt_service_enviar_json(const char *topic, int qos, int retain, ...);
+
+    /**
+     * @brief Obtiene si el cliente MQTT está conectado actualmente
+     * 
+     * @return true si está conectado, false en caso contrario
+     */
+    bool mqtt_service_esta_conectado(void);
 
 #ifdef __cplusplus
 }

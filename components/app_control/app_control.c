@@ -158,15 +158,26 @@ esp_err_t app_control_cambiar_estado(estado_app_t nuevo_estado)
 
     // --- GESTIÓN DE RECURSOS SEGÚN ESTADO ---
     if (nuevo_estado == ESTADO_CONFIGURACION) {
+        // Siempre detener estos servicios al entrar en configuración
         mqtt_service_stop();
         sta_wifi_disconnect();
-        // Si no usas WiFi en configuración, puedes usar sta_wifi_deinit();
     } else if (nuevo_estado == ESTADO_MANUAL || nuevo_estado == ESTADO_AUTOMATICO) {
-        sta_wifi_init(); // idempotente
-        sta_wifi_connect_with_nvs(7000);
-        time_manager_init("pool.ntp.org");
-        mqtt_service_start(); // idempotente
+        // Inicializar servicios en cualquiera de estos casos:
+        // 1. Si venimos de CONFIGURACION (cambio directo)
+        // 2. Si es primera inicialización (estado_actual == INVALIDO)
+        // 3. Tras un reinicio, verificando si WiFi no está conectado
+        if (estado_actual == ESTADO_CONFIGURACION || 
+            estado_actual == ESTADO_INVALIDO || 
+            !sta_wifi_is_connected()) {
+            
+            ESP_LOGI(TAG, "Inicializando servicios de conectividad para estado %d", nuevo_estado);
+            sta_wifi_init(); // idempotente
+            sta_wifi_connect_with_nvs(7000);
+            time_manager_init("pool.ntp.org");
+            mqtt_service_start(); // idempotente
+        }
     }
+
 
     // Actualiza la variable de estado actual y registra el cambio
     estado_actual = nuevo_estado;
@@ -200,6 +211,17 @@ esp_err_t app_control_cambiar_estado(estado_app_t nuevo_estado)
 estado_app_t app_control_obtener_estado_actual(void)
 {
     // Simplemente devuelve la variable de estado actual
+    return estado_actual;
+}
+
+/**
+ * Obtiene el estado actual del sistema de forma segura.
+ * Esta implementación siempre es segura para llamar, incluso desde ISRs.
+ *
+ * @return El estado actual de la aplicación
+ */
+estado_app_t app_control_get_estado(void)
+{
     return estado_actual;
 }
 

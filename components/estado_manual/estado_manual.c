@@ -1,6 +1,9 @@
 #include "estado_manual.h"
 #include "esp_log.h"
 #include "relay_controller.h" // Añadido para acceder al controlador de relé
+#include "mqtt_service.h"
+#include "wifi_sta.h" // Añadido para obtener la MAC
+#include "time_manager.h" // Añadido para obtener la fecha actual
 
 
 static const char *TAG = "ESTADO_MANUAL"; // Corregido el nombre del tag
@@ -10,6 +13,22 @@ esp_err_t estado_manual_iniciar(void) {
     if (estado_activo) {
         ESP_LOGW(TAG, "Estado manual ya está activo");
         return ESP_OK;
+    }else
+    {
+        const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
+        const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
+        char topic[64];
+        snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
+        char fecha_actual[24];
+        if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
+        {
+            mqtt_service_enviar_json(topic, 2, 1, "Modo", "manual", "Fecha", fecha_actual, NULL);
+            printf("Fecha actual: %s\n", fecha_actual);
+        }
+        else
+        {
+            mqtt_service_enviar_json(topic, 2, 1, "Modo", "manual", NULL);
+        }
     }
 
     ESP_LOGI(TAG, "Iniciando el modo manual");
@@ -28,7 +47,7 @@ esp_err_t estado_manual_detener(void) {
     }
 
     ESP_LOGI(TAG, "Deteniendo el modo manual");
-    
+    relay_controller_set_state(false);
     // Aquí iría la lógica para detener el estado manual
     // Por ahora solo mostramos un log simple
 
@@ -40,7 +59,7 @@ esp_err_t estado_manual_alternar_rele(void) {
     if (!estado_activo) {
         ESP_LOGW(TAG, "No se puede alternar relé: estado manual no activo");
         return ESP_ERR_INVALID_STATE;
-    }
+    } 
     
     bool estado_actual;
     esp_err_t ret = relay_controller_get_state(&estado_actual);

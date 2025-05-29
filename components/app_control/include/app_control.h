@@ -63,3 +63,10 @@ esp_err_t app_control_iniciar_estado(void);
  * @return ESP_OK si la tarea fue lanzada correctamente
  */
 esp_err_t app_control_lanzar_transicion(estado_app_t destino, const char *tag);
+
+/**
+ * Obtiene el estado actual de la aplicación.
+ *
+ * @return Estado actual del sistema.
+ */
+estado_app_t app_control_get_estado(void);

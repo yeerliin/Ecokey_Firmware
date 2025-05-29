@@ -27,9 +27,9 @@ typedef struct {
  * @brief Configuración por defecto para el escáner BLE
  */
 #define BLE_SCANNER_DEFAULT_CONFIG() { \
-    .passive = true, \
-    .scan_interval = 0x0010, \
-    .scan_window = 0x0010, \
+    .passive = false, \
+    .scan_interval = 0x0060, /* 60 * 0.625ms = 37.5ms entre inicios de ventana */ \
+    .scan_window = 0x0030,   /* 30 * 0.625ms = 18.75ms de escaneo activo */ \
     .filter_duplicates = false, \
     .duration_ms = 0 \
 }
