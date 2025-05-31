@@ -21,46 +21,112 @@ static volatile uint32_t automatico_timeout_ms = 10 * 60 * 1000; // 10 minutos p
 #define AUTOMATICO_TASK_PERIOD_MS 500
 #define BLE_TARGET_INDEX 0 // Usar el índice 0 para la MAC objetivo
 
+// Parámetros de ventana de re-chequeo
+#define FRACCION_RECHEQUEO 4         // 1/4 del tiempo total
+#define MIN_RECHEQUEO_MS (50 * 1000) // Nunca menos de 50 segundos
+
 static void automatico_task(void *param)
 {
     int64_t last_detected_time = 0;
     bool rele_activado = false;
+    bool escaneo_activo = false;
+    int64_t rele_apagado_time = 0;
+    uint32_t timeout_ms = automatico_timeout_ms;
+    uint32_t ventana_rechequeo_ms = timeout_ms / FRACCION_RECHEQUEO;
+    if (ventana_rechequeo_ms < MIN_RECHEQUEO_MS) ventana_rechequeo_ms = MIN_RECHEQUEO_MS;
+
+    // Nuevo: contador para reinicio periódico del escáner
+    const int64_t REINICIO_ESCANEO_MS = 30 * 60 * 1000; // 30 minutos
+    int64_t ultimo_reinicio_escaneo = esp_timer_get_time() / 1000;
 
     while (estado_activo)
     {
-        bool detectado = ble_scanner_tag_detectado(BLE_TARGET_INDEX);
+        timeout_ms = automatico_timeout_ms; // Por si cambia en caliente
+        ventana_rechequeo_ms = timeout_ms / FRACCION_RECHEQUEO;
+        if (ventana_rechequeo_ms < MIN_RECHEQUEO_MS) ventana_rechequeo_ms = MIN_RECHEQUEO_MS;
+
         int64_t now = esp_timer_get_time() / 1000; // ms
 
-        uint32_t timeout_ms = automatico_timeout_ms; // leer valor actual
+        if (!rele_activado) {
+            // Relé apagado: escaneo BLE siempre activo
+            if (!escaneo_activo) {
+                ble_scanner_reiniciar();
+                escaneo_activo = true;
+                ESP_LOGI(TAG, "Escaneo BLE activado (relé apagado)");
+            }
 
-        if (detectado)
-        {
-            last_detected_time = now;
-            if (!rele_activado)
-            {
+            bool detectado = ble_scanner_tag_detectado(BLE_TARGET_INDEX);
+            if (detectado) {
+                last_detected_time = now;
                 relay_controller_activate();
                 rele_activado = true;
                 ESP_LOGI(TAG, "Relé activado por detección BLE");
+                ble_scanner_detener();
+                escaneo_activo = false;
+                rele_apagado_time = now + timeout_ms;
+            } else {
+                // Si lleva ausente más de 1 minuto, aplicar duty cycle
+                if ((now - last_detected_time) > 60000) {
+                    // Duty cycle: escanear 5s, pausar 5s
+                    if (escaneo_activo && ((now / 5000) % 2 == 1)) {
+                        ble_scanner_detener();
+                        escaneo_activo = false;
+                    } else if (!escaneo_activo && ((now / 5000) % 2 == 0)) {
+                        ble_scanner_reiniciar();
+                        escaneo_activo = true;
+                    }
+                }
             }
-        }
-        else
-        {
-            if (rele_activado && (now - last_detected_time > timeout_ms))
-            {
+
+            // Nuevo: reiniciar escáner si lleva mucho tiempo ausente
+            if (escaneo_activo && (now - ultimo_reinicio_escaneo) > REINICIO_ESCANEO_MS) {
+                ESP_LOGI(TAG, "Reiniciando escáner BLE por periodo largo de ausencia");
+                ble_scanner_reiniciar();
+                ultimo_reinicio_escaneo = now;
+            }
+        } else {
+            // Relé encendido: escaneo BLE parado
+            int64_t tiempo_restante = rele_apagado_time - now;
+            bool detectado = false; // Declarar aquí para todo el bloque
+
+            // Reactivar escaneo solo en la ventana de re-chequeo
+            if (tiempo_restante <= ventana_rechequeo_ms && !escaneo_activo) {
+                ble_scanner_reiniciar();
+                escaneo_activo = true;
+                ESP_LOGI(TAG, "Escaneo BLE reactivado (ventana de re-chequeo: %lu ms)", ventana_rechequeo_ms);
+            }
+
+            if (escaneo_activo) {
+                detectado = ble_scanner_tag_detectado(BLE_TARGET_INDEX);
+                if (detectado) {
+                    last_detected_time = now;
+                    rele_apagado_time = now + timeout_ms;
+                    ble_scanner_detener();
+                    escaneo_activo = false;
+                    ESP_LOGI(TAG, "Tag detectado de nuevo, temporizador reiniciado y escaneo parado");
+                }
+            }
+
+            if (now >= rele_apagado_time) {
                 relay_controller_deactivate();
                 rele_activado = false;
-                ESP_LOGI(TAG, "Relé desactivado por ausencia de BLE >%lu ms", timeout_ms);
+                ESP_LOGI(TAG, "Relé desactivado por timeout");
+                // BLE escaneo se reactivará en el siguiente ciclo
+            }
+
+            // Al detectar el tag, reiniciar el contador de reinicio
+            if (detectado) {
+                ultimo_reinicio_escaneo = now;
             }
         }
 
         vTaskDelay(pdMS_TO_TICKS(AUTOMATICO_TASK_PERIOD_MS));
     }
 
-    // Al salir, asegurar relé desactivado
+    // Al salir, asegurar relé desactivado y BLE parado
     relay_controller_deactivate();
+    ble_scanner_deinicializar();
     ESP_LOGI(TAG, "Tarea automática detenida y relé desactivado");
-
-    // Limpieza segura del handle aquí
     automatico_task_handle = NULL;
     vTaskDelete(NULL);
 }
@@ -74,7 +140,6 @@ esp_err_t estado_automatico_iniciar(void)
     }
     else
     {
-        const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
         snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
@@ -93,13 +158,14 @@ esp_err_t estado_automatico_iniciar(void)
     ESP_LOGI(TAG, "Iniciando el modo automático");
 
     // Recuperar la MAC objetivo desde NVS
-    char mac_objetivo[18] = {0}; // Formato XX:XX:XX:XX:XX:XX (17 chars + null)
+    char mac_objetivo[24] = {0}; // Formato XX:XX:XX:XX:XX:XX (17 chars + null + extra)
     esp_err_t err = nvs_manager_get_string("mac_objetivo", mac_objetivo, sizeof(mac_objetivo));
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "Error al recuperar MAC objetivo de NVS: %s", esp_err_to_name(err));
         return ESP_FAIL;
     }
+    ESP_LOGI(TAG, "MAC objetivo cargada de NVS: [%s]", mac_objetivo);
     if (strlen(mac_objetivo) < 12)
     {
         ESP_LOGE(TAG, "MAC objetivo no válida: %s", mac_objetivo);

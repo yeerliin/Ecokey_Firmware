@@ -72,9 +72,6 @@ static IRAM_ATTR int ble_app_scan_cb(struct ble_gap_event *event, void *arg)
     {
         const uint8_t *adv_mac = event->disc.addr.val;
 
-        // Quitar logs aquí, NO usar ESP_LOG* en IRAM_ATTR ni en ISR
-        // ESP_LOGI(TAG, "MAC detectada: ...");
-
         // Crear hash de los primeros 4 bytes de la MAC recibida para comparación rápida
         uint32_t adv_hash = ((uint32_t)adv_mac[0] << 24) |
                             ((uint32_t)adv_mac[1] << 16) |
@@ -142,15 +139,14 @@ static void detection_task(void *param)
             // Solo loguear la PRIMERA vez que se detecta el tag
             if (!tag_reportado[info.target_idx]) {
                 tag_reportado[info.target_idx] = true;
-                ESP_LOGI(TAG, "MAC detectada: #%d con RSSI: %d", info.target_idx, info.rssi);
-                ESP_LOGI(TAG, "✅ Tag #%d detectado! MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+                ESP_LOGI(TAG, "Tag #%d detectado! MAC: %02X:%02X:%02X:%02X:%02X:%02X RSSI:%d",
                          info.target_idx,
                          s_targets[info.target_idx].mac[5], s_targets[info.target_idx].mac[4],
                          s_targets[info.target_idx].mac[3], s_targets[info.target_idx].mac[2],
-                         s_targets[info.target_idx].mac[1], s_targets[info.target_idx].mac[0]);
+                         s_targets[info.target_idx].mac[1], s_targets[info.target_idx].mac[0],
+                         info.rssi);
             }
             // Si quieres volver a permitir el log tras perder el tag, puedes resetear el flag
-            // desde otra función/tarea cuando el tag deje de estar presente.
         }
     }
 }
@@ -356,7 +352,6 @@ esp_err_t ble_scanner_detener(void)
 
     if (!s_escaneo_activo)
     {
-        ESP_LOGW(TAG, "El escáner BLE no está activo actualmente");
         return ESP_OK;
     }
 
