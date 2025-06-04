@@ -20,6 +20,7 @@
 #include "ble_scanner.h"
 #include "relay_controller.h"
 #include "app_control.h"
+#include "estado_automatico.h"
 
 extern const uint8_t ca_pem_start[] asm("_binary_ca_pem_start");
 extern const uint8_t ca_pem_end[]   asm("_binary_ca_pem_end");
@@ -277,9 +278,14 @@ static void mqtt_service_procesar_mensaje(const char *topic, const char *json)
             cJSON *temp_obj = cJSON_GetObjectItem(root, "temporizador");
             if (temp_obj && cJSON_IsNumber(temp_obj)) {
                 char temp_str[8];
-                snprintf(temp_str, sizeof(temp_str), "%d", temp_obj->valueint);
+                int temp_value = temp_obj->valueint;
+                snprintf(temp_str, sizeof(temp_str), "%d", temp_value);
                 ESP_LOGI(TAG, "Actualizando temporizador en NVS: %s minutos", temp_str);
                 nvs_manager_set_string("temporizador", temp_str);
+                
+                // Actualizar también el temporizador en el componente de estado_automatico
+                estado_automatico_set_timeout_minutos(temp_value);
+                ESP_LOGI(TAG, "Temporizador actualizado en tiempo de ejecución a %d minutos", temp_value);
             }
             
             // Procesar Estado (booleano)

@@ -30,4 +30,6 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG, "Aplicación en ejecución con estado inicial activado");
+
+    
 }

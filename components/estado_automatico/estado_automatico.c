@@ -11,6 +11,7 @@
 #include "mqtt_service.h"
 #include "wifi_sta.h"
 #include "time_manager.h"
+#include "led.h" // Para detener el parpadeo del LED al iniciar el modo automático
 
 static const char *TAG = "ESTADO_AUTO";
 static bool estado_activo = false;
@@ -142,11 +143,11 @@ esp_err_t estado_automatico_iniciar(void)
     {
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
-        snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
+        snprintf(topic, sizeof(topic), "dispositivos/%s/modo", mac_topic); // <-- Cambiado a /modo
         char fecha_actual[24];
         if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
         {
-            mqtt_service_enviar_json(topic, 2, 1, "Modo", "automatico", "Fecha", fecha_actual, NULL);
+            mqtt_service_enviar_json(topic, 2, 1, "Modo", "automatico", "FechaModo", fecha_actual, NULL);
             printf("Fecha actual: %s\n", fecha_actual);
         }
         else
@@ -154,7 +155,7 @@ esp_err_t estado_automatico_iniciar(void)
             mqtt_service_enviar_json(topic, 2, 1, "Modo", "automaticoo", NULL);
         }
     }
-
+    led_blink_stop(); 
     ESP_LOGI(TAG, "Iniciando el modo automático");
 
     // Recuperar la MAC objetivo desde NVS
@@ -252,7 +253,7 @@ esp_err_t estado_automatico_detener(void)
     return ESP_OK;
 }
 
-// (Opcional) Función para actualizar el timeout desde otro componente (ej: MQTT)
+// Modificar la función estado_automatico_set_timeout_minutos para actualizar la ventana de re-chequeo
 void estado_automatico_set_timeout_minutos(uint32_t minutos)
 {
     if (minutos < 1)
@@ -261,6 +262,11 @@ void estado_automatico_set_timeout_minutos(uint32_t minutos)
         minutos = 30;
     automatico_timeout_ms = minutos * 60 * 1000;
     ESP_LOGI(TAG, "Timeout actualizado dinámicamente a %lu minutos (%lu ms)", minutos, automatico_timeout_ms);
+    
+    // Calcular y mostrar la nueva ventana de re-chequeo
+    uint32_t ventana_rechequeo_ms = automatico_timeout_ms / FRACCION_RECHEQUEO;
+    if (ventana_rechequeo_ms < MIN_RECHEQUEO_MS) ventana_rechequeo_ms = MIN_RECHEQUEO_MS;
+    ESP_LOGI(TAG, "Nueva ventana de re-chequeo: %lu ms", ventana_rechequeo_ms);
 
     // Guardar en NVS para persistencia tras reinicio
     char temp_str[8];

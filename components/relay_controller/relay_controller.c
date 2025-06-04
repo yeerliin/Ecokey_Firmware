@@ -8,7 +8,7 @@
 static const char *TAG = "RELAY_CONTROLLER";
 
 // Configuración fija para el relé
-#define RELAY_GPIO_PIN 13       // Pin fijo para el relé
+#define RELAY_GPIO_PIN 7      // Pin fijo para el relé
 #define RELAY_ACTIVE_HIGH true // Siempre activo en nivel alto
 
 static bool relay_state = false;
@@ -63,7 +63,7 @@ esp_err_t relay_controller_activate(void)
         const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
-        snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
+        snprintf(topic, sizeof(topic), "dispositivos/%s/estado", mac_topic); // <-- Cambiado a /estado
         char fecha_actual[24];
         if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
         {
@@ -94,7 +94,7 @@ esp_err_t relay_controller_deactivate(void)
         const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
-        snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
+        snprintf(topic, sizeof(topic), "dispositivos/%s/estado", mac_topic); // <-- Cambiado a /estado
         char fecha_actual[24];
         if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
         {

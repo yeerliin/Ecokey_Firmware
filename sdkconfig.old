@@ -375,7 +375,7 @@ CONFIG_IDF_TOOLCHAIN_GCC=y
 CONFIG_IDF_TARGET_ARCH_XTENSA=y
 CONFIG_IDF_TARGET_ARCH="xtensa"
 CONFIG_IDF_TARGET="esp32s3"
-CONFIG_IDF_INIT_VERSION="$IDF_INIT_VERSION"
+CONFIG_IDF_INIT_VERSION="5.4.1"
 CONFIG_IDF_TARGET_ESP32S3=y
 CONFIG_IDF_FIRMWARE_CHIP_ID=0x0009
 
@@ -2394,12 +2394,20 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 # end of Wi-Fi Provisioning Manager
 
 #
-# Example Configuration
+# MQTT Configuration
 #
 CONFIG_BROKER_URL="mqtts://w05a6bdd.ala.eu-central-1.emqxsl.com:8883"
 CONFIG_MQTT_USERNAME="yerlin"
 CONFIG_MQTT_PASSWORD="yerlin1234"
-# end of Example Configuration
+# end of MQTT Configuration
+
+#
+# Configuración de Time Manager
+#
+CONFIG_TIME_MANAGER_DEFAULT_NTP_SERVER="pool.ntp.org"
+CONFIG_TIME_MANAGER_AUTO_SYNC_ON_BOOT=y
+CONFIG_TIME_MANAGER_AUTO_SYNC_INTERVAL=60
+# end of Configuración de Time Manager
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set

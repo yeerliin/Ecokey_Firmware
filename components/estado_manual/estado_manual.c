@@ -4,6 +4,7 @@
 #include "mqtt_service.h"
 #include "wifi_sta.h" // Añadido para obtener la MAC
 #include "time_manager.h" // Añadido para obtener la fecha actual
+#include "led.h" // Añadido para detener el parpadeo del LED al iniciar el modo manual
 
 
 static const char *TAG = "ESTADO_MANUAL"; // Corregido el nombre del tag
@@ -18,11 +19,11 @@ esp_err_t estado_manual_iniciar(void) {
         const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
         const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
         char topic[64];
-        snprintf(topic, sizeof(topic), "dispositivos/%s", mac_topic);
+        snprintf(topic, sizeof(topic), "dispositivos/%s/modo", mac_topic); // <-- Cambiado a /modo
         char fecha_actual[24];
         if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
         {
-            mqtt_service_enviar_json(topic, 2, 1, "Modo", "manual", "Fecha", fecha_actual, NULL);
+            mqtt_service_enviar_json(topic, 2, 1, "Modo", "manual", "FechaModo", fecha_actual, NULL);
             printf("Fecha actual: %s\n", fecha_actual);
         }
         else
@@ -30,7 +31,7 @@ esp_err_t estado_manual_iniciar(void) {
             mqtt_service_enviar_json(topic, 2, 1, "Modo", "manual", NULL);
         }
     }
-
+    led_blink_stop(); 
     ESP_LOGI(TAG, "Iniciando el modo manual");
     
     // Aquí iría la lógica específica del estado manual
