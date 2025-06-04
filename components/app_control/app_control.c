@@ -16,11 +16,9 @@
 #include <string.h>
 // Inclusión para usar colas de FreeRTOS
 #include "freertos/queue.h"
-<<<<<<< HEAD
-=======
 #include "wifi_sta.h"
 #include "mqtt_service.h"
->>>>>>> CorregirWifi
+#include "time_manager.h"
 
 // Etiqueta para los mensajes de log de este módulo
 static const char *TAG = "APP_CONTROL";
@@ -160,17 +158,28 @@ esp_err_t app_control_cambiar_estado(estado_app_t nuevo_estado)
 
     // --- GESTIÓN DE RECURSOS SEGÚN ESTADO ---
     if (nuevo_estado == ESTADO_CONFIGURACION) {
+        // Siempre detener estos servicios al entrar en configuración
         mqtt_service_stop();
         sta_wifi_disconnect();
-        // Si no usas WiFi en configuración, puedes usar sta_wifi_deinit();
     } else if (nuevo_estado == ESTADO_MANUAL || nuevo_estado == ESTADO_AUTOMATICO) {
-        sta_wifi_init(); // idempotente
-        sta_wifi_connect_with_nvs(7000);
-        mqtt_service_start(); // idempotente
+        // Inicializar servicios en cualquiera de estos casos:
+        // 1. Si venimos de CONFIGURACION (cambio directo)
+        // 2. Si es primera inicialización (estado_actual == INVALIDO)
+        // 3. Tras un reinicio, verificando si WiFi no está conectado
+        if (estado_actual == ESTADO_CONFIGURACION || 
+            estado_actual == ESTADO_INVALIDO || 
+            !sta_wifi_is_connected()) {
+            
+            ESP_LOGI(TAG, "Inicializando servicios de conectividad para estado %d", nuevo_estado);
+            sta_wifi_init(); // idempotente
+            sta_wifi_connect_with_nvs(7000);
+            time_manager_init("pool.ntp.org");
+            mqtt_service_start(); // idempotente
+        }
     }
 
+
     // Actualiza la variable de estado actual y registra el cambio
-    estado_app_t estado_anterior = estado_actual;
     estado_actual = nuevo_estado;
 
     // Guarda el nuevo estado en almacenamiento persistente
@@ -206,6 +215,17 @@ estado_app_t app_control_obtener_estado_actual(void)
 }
 
 /**
+ * Obtiene el estado actual del sistema de forma segura.
+ * Esta implementación siempre es segura para llamar, incluso desde ISRs.
+ *
+ * @return El estado actual de la aplicación
+ */
+estado_app_t app_control_get_estado(void)
+{
+    return estado_actual;
+}
+
+/**
  * Guarda el estado actual en almacenamiento persistente (NVS).
  *
  * @return ESP_OK si se guardó correctamente, o error en caso contrario
@@ -235,15 +255,6 @@ esp_err_t app_control_iniciar_estado(void)
     uint8_t estado_nvs = nvs_manager_get_u8(NVS_KEY_ESTADO, ESTADO_INVALIDO);
     estado_app_t estado = (estado_app_t)estado_nvs;
 
-<<<<<<< HEAD
-    if (estado == ESTADO_INVALIDO) {
-        ESP_LOGI(TAG, LOG_PREFIX_BOOT " Primer arranque detectado. Iniciando con estado CONFIGURARACION");
-        ret = app_control_cambiar_estado(ESTADO_CONFIGURACION);
-    } else {
-        const estado_entry_t *entry = buscar_estado_entry(estado);
-        ESP_LOGI(TAG, LOG_PREFIX_BOOT " Restaurando estado guardado: %s (%d)", 
-                entry ? entry->nombre : "DESCONOCIDO", estado);
-=======
     // Verificar si existen credenciales WiFi
     if (!nvs_manager_has_wifi_credentials())
     {
@@ -256,7 +267,6 @@ esp_err_t app_control_iniciar_estado(void)
         {
             estado = ESTADO_AUTOMATICO; // Cambiar a un estado por defecto si es CONFIGURACION
         }
->>>>>>> CorregirWifi
         ret = app_control_cambiar_estado(estado);
     }
 
@@ -275,6 +285,10 @@ typedef struct
 static QueueHandle_t transicion_queue = NULL;
 // Manejador de la tarea de control de estado
 static TaskHandle_t tarea_control_estado_handle = NULL;
+// Semáforo para proteger operaciones críticas de transición
+static SemaphoreHandle_t transicion_mutex = NULL;
+// Estado actualmente en proceso de transición
+static estado_app_t estado_en_transicion = ESTADO_INVALIDO;
 
 /**
  * Tarea permanente que procesa las solicitudes de transición de estado.
@@ -289,7 +303,43 @@ static void tarea_control_estado(void *param)
     {
         if (xQueueReceive(transicion_queue, &args, portMAX_DELAY) == pdTRUE)
         {
-            app_control_cambiar_estado(args.destino);
+            // Tomar el semáforo para evitar condiciones de carrera
+            if (xSemaphoreTake(transicion_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                // Solo procesar si no es el estado actual o si es una reinicialización del mismo estado
+                if (args.destino != estado_actual || !estado_inicializado) {
+                    estado_en_transicion = args.destino;
+                    xSemaphoreGive(transicion_mutex);
+                    
+                    ESP_LOGI(TAG, LOG_PREFIX_TRANS " Procesando transición a %d desde %s", 
+                             args.destino, args.tag);
+                    app_control_cambiar_estado(args.destino);
+                    
+                    // Marcar que ya no hay transición en curso
+                    xSemaphoreTake(transicion_mutex, portMAX_DELAY);
+                    estado_en_transicion = ESTADO_INVALIDO;
+                    xSemaphoreGive(transicion_mutex);
+                } else {
+                    ESP_LOGW(TAG, LOG_PREFIX_TRANS " Ignorando transición redundante a %d desde %s", 
+                             args.destino, args.tag);
+                    xSemaphoreGive(transicion_mutex);
+                }
+            } else {
+                ESP_LOGE(TAG, LOG_PREFIX_TRANS " No se pudo obtener el mutex para procesar transición");
+            }
+            
+            // Vaciar la cola de solicitudes redundantes para el mismo destino
+            transicion_args_t siguiente;
+            while (xQueuePeek(transicion_queue, &siguiente, 0) == pdTRUE) {
+                if (siguiente.destino == args.destino) {
+                    // Si es el mismo destino, sacar de la cola y descartar
+                    xQueueReceive(transicion_queue, &siguiente, 0);
+                    ESP_LOGW(TAG, LOG_PREFIX_TRANS " Descartando transición redundante a %d desde %s", 
+                             siguiente.destino, siguiente.tag);
+                } else {
+                    // Si es diferente destino, dejar en la cola
+                    break;
+                }
+            }
         }
     }
 }
@@ -308,20 +358,36 @@ esp_err_t app_control_lanzar_transicion(estado_app_t destino, const char *tag)
     // Si la cola no existe aún, inicializa el sistema de transiciones
     if (!transicion_queue)
     {
-        transicion_queue = xQueueCreate(4, sizeof(transicion_args_t));
-        if (!transicion_queue)
+        transicion_queue = xQueueCreate(8, sizeof(transicion_args_t)); // Aumentamos el tamaño de la cola
+        transicion_mutex = xSemaphoreCreateMutex();
+        
+        if (!transicion_queue || !transicion_mutex)
         {
-            ESP_LOGE(TAG, LOG_PREFIX_BOOT " No se pudo crear cola de transiciones");
+            ESP_LOGE(TAG, LOG_PREFIX_BOOT " No se pudieron crear recursos para transiciones");
             return ESP_ERR_NO_MEM;
         }
         xTaskCreate(tarea_control_estado, "tarea_control_estado", 4096, NULL, tskIDLE_PRIORITY + 2, &tarea_control_estado_handle);
+    }
+
+    // Verificar si ya hay una transición en curso para el mismo destino
+    bool transicion_duplicada = false;
+    if (xSemaphoreTake(transicion_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        transicion_duplicada = (estado_en_transicion == destino);
+        xSemaphoreGive(transicion_mutex);
+    }
+    
+    // Si ya hay una transición al mismo destino, no encolar otra
+    if (transicion_duplicada) {
+        ESP_LOGW(TAG, LOG_PREFIX_TRANS " Ya hay una transición a %d en curso, ignorando solicitud", destino);
+        return ESP_OK; // No es un error, simplemente no es necesario
     }
 
     transicion_args_t args = {.destino = destino};
     strncpy(args.tag, tag ? tag : "TRANSICION", sizeof(args.tag) - 1);
     args.tag[sizeof(args.tag) - 1] = '\0';
 
-    if (xQueueSend(transicion_queue, &args, 0) != pdTRUE)
+    // Enviar a la cola con un tiempo de espera breve
+    if (xQueueSend(transicion_queue, &args, pdMS_TO_TICKS(50)) != pdTRUE)
     {
         ESP_LOGE(TAG, LOG_PREFIX_TRANS " Cola llena, transición a %d descartada", destino);
         return ESP_FAIL;

@@ -2394,12 +2394,20 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 # end of Wi-Fi Provisioning Manager
 
 #
-# Example Configuration
+# MQTT Configuration
 #
-CONFIG_BROKER_URL="mqtt://200.234.232.238:1883"
+CONFIG_BROKER_URL="mqtts://w05a6bdd.ala.eu-central-1.emqxsl.com:8883"
 CONFIG_MQTT_USERNAME="yerlin"
-CONFIG_MQTT_PASSWORD="yerlin123"
-# end of Example Configuration
+CONFIG_MQTT_PASSWORD="yerlin1234"
+# end of MQTT Configuration
+
+#
+# Configuración de Time Manager
+#
+CONFIG_TIME_MANAGER_DEFAULT_NTP_SERVER="pool.ntp.org"
+CONFIG_TIME_MANAGER_AUTO_SYNC_ON_BOOT=y
+CONFIG_TIME_MANAGER_AUTO_SYNC_INTERVAL=60
+# end of Configuración de Time Manager
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set

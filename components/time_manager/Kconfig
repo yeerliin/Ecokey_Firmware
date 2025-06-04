@@ -1,0 +1,23 @@
+menu "Configuración de Time Manager"
+
+config TIME_MANAGER_DEFAULT_NTP_SERVER
+    string "Servidor NTP predeterminado"
+    default "pool.ntp.org"
+    help
+        Servidor NTP utilizado para sincronizar la hora cuando no se especifica uno.
+
+config TIME_MANAGER_AUTO_SYNC_ON_BOOT
+    bool "Sincronizar automáticamente al arrancar"
+    default y
+    help
+        Si está habilitado, la hora se sincronizará automáticamente al arrancar el sistema.
+
+config TIME_MANAGER_AUTO_SYNC_INTERVAL
+    int "Intervalo de resincronización automática (minutos)"
+    default 0
+    range 0 1440
+    help
+        Intervalo en minutos para resincronizar automáticamente la hora con el servidor NTP.
+        0 = solo sincronizar una vez al arrancar.
+
+endmenu

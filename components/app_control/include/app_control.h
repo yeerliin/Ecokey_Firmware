@@ -58,8 +58,20 @@ esp_err_t app_control_iniciar_estado(void);
 /**
  * @brief Lanza una transición de estado en una tarea genérica
  *
+ * Esta función maneja las transiciones de estado de forma asíncrona y segura:
+ * - Filtra solicitudes redundantes al mismo destino
+ * - Previene sobrecarga de la cola de transiciones
+ * - Maneja automáticamente múltiples solicitudes para el mismo estado
+ *
  * @param destino Estado al que se quiere transicionar
  * @param tag Nombre para logging (usualmente el TAG del archivo actual)
- * @return ESP_OK si la tarea fue lanzada correctamente
+ * @return ESP_OK si la tarea fue lanzada correctamente o si ya existe una transición igual
  */
 esp_err_t app_control_lanzar_transicion(estado_app_t destino, const char *tag);
+
+/**
+ * Obtiene el estado actual de la aplicación.
+ *
+ * @return Estado actual del sistema.
+ */
+estado_app_t app_control_get_estado(void);

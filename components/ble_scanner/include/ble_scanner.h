@@ -13,6 +13,21 @@ extern "C" {
 #define BLE_SCANNER_MAX_TARGET_DEVICES 10
 
 /**
+ * @brief Umbrales de temperatura para el control térmico (en °C)
+ */
+#define BLE_SCANNER_TEMP_WARNING       60  /**< Umbral de advertencia */
+#define BLE_SCANNER_TEMP_CRITICAL      70  /**< Umbral crítico */
+
+/**
+ * @brief Modos de operación térmica
+ */
+typedef enum {
+    BLE_THERMAL_MODE_NORMAL = 0,   /**< Operación normal */
+    BLE_THERMAL_MODE_WARNING,      /**< Modo de advertencia - actividad reducida */
+    BLE_THERMAL_MODE_CRITICAL      /**< Modo crítico - escaneo detenido */
+} ble_thermal_mode_t;
+
+/**
  * @brief Configuración para el escáner BLE
  */
 typedef struct {
@@ -21,6 +36,9 @@ typedef struct {
     uint16_t scan_window;      /**< Ventana de escaneo (unidades de 0.625ms) */
     bool filter_duplicates;    /**< Filtrar dispositivos duplicados */
     int duration_ms;           /**< Duración del escaneo en ms (0 = infinito) */
+    bool control_termico;      /**< Activar control térmico automático */
+    float temp_warning;        /**< Temperatura de advertencia personalizada (°C) */
+    float temp_critical;       /**< Temperatura crítica personalizada (°C) */
 } ble_scanner_config_t;
 
 /**
@@ -31,7 +49,10 @@ typedef struct {
     .scan_interval = 0x0010, \
     .scan_window = 0x0010, \
     .filter_duplicates = false, \
-    .duration_ms = 0 \
+    .duration_ms = 0, \
+    .control_termico = true, \
+    .temp_warning = BLE_SCANNER_TEMP_WARNING, \
+    .temp_critical = BLE_SCANNER_TEMP_CRITICAL \
 }
 
 /**
@@ -119,6 +140,36 @@ esp_err_t ble_scanner_limpiar_macs_objetivo(void);
  */
 bool ble_scanner_esta_activo(void);
 
+/**
+ * @brief Obtiene la temperatura actual del chip
+ * 
+ * @return float Temperatura en grados celsius
+ */
+float ble_scanner_obtener_temperatura(void);
+
+/**
+ * @brief Obtiene el modo térmico actual del escáner
+ * 
+ * @return ble_thermal_mode_t El modo térmico actual
+ */
+ble_thermal_mode_t ble_scanner_obtener_modo_termico(void);
+
+/**
+ * @brief Establece manualmente los umbrales de temperatura
+ * 
+ * @param temp_warning Temperatura de advertencia en °C
+ * @param temp_critical Temperatura crítica en °C
+ * @return esp_err_t ESP_OK si la operación fue exitosa
+ */
+esp_err_t ble_scanner_configurar_umbrales_temperatura(float temp_warning, float temp_critical);
+
+/**
+ * @brief Activa o desactiva el control térmico automático
+ * 
+ * @param activar true para activar, false para desactivar
+ * @return esp_err_t ESP_OK si la operación fue exitosa
+ */
+esp_err_t ble_scanner_activar_control_termico(bool activar);
 
 #ifdef __cplusplus
 }

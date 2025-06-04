@@ -33,6 +33,7 @@ esp_err_t inicializar_componentes(void)
         ESP_LOGE(TAG, "Error al inicializar LED: %s", esp_err_to_name(ret));
         return ret;
     }
+    led_blink_start(100);
 
     // 3. Inicializar Relay Controller
     ESP_LOGI(TAG, "Inicializando Relay Controller...");
