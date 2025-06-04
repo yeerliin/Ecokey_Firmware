@@ -9,8 +9,51 @@
 
 static const char *TAG = "MAIN";
 
+static const char *reset_reason_to_str(esp_reset_reason_t reason)
+{
+    switch (reason) {
+    case ESP_RST_UNKNOWN:
+        return "UNKNOWN";
+    case ESP_RST_POWERON:
+        return "POWERON";
+    case ESP_RST_EXT:
+        return "EXT";
+    case ESP_RST_SW:
+        return "SW";
+    case ESP_RST_PANIC:
+        return "PANIC";
+    case ESP_RST_INT_WDT:
+        return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+        return "TASK_WDT";
+    case ESP_RST_WDT:
+        return "WDT";
+    case ESP_RST_DEEPSLEEP:
+        return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+        return "BROWNOUT";
+    case ESP_RST_SDIO:
+        return "SDIO";
+    case ESP_RST_USB:
+        return "USB";
+    case ESP_RST_JTAG:
+        return "JTAG";
+    case ESP_RST_RTCWDT:
+        return "RTC_WDT";
+    case ESP_RST_CORE_SW:
+        return "CORE_SW";
+    case ESP_RST_CORE_DEEP_SLEEP:
+        return "CORE_DEEPSLEEP";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 void app_main(void)
 {
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    ESP_LOGI(TAG, "Reset reason: %s (%d)", reset_reason_to_str(reset_reason), reset_reason);
+
     ESP_LOGI(TAG, "Iniciando aplicación EcoKey");
 
     // 1. Inicializar todos los componentes básicos (incluido app_control)
