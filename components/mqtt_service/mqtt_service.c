@@ -23,6 +23,12 @@
 #include "estado_automatico.h"
 #include "ota_service.h"
 
+// Declaración externa de la variable del motivo de reinicio
+extern esp_reset_reason_t motivo_reinicio_global;
+extern const char* str_motivo_reinicio_global;
+
+// Variable para controlar que el motivo de reinicio se envíe una sola vez por arranque real
+static bool motivo_reinicio_enviado = false;
 
 extern const uint8_t ca_pem_start[] asm("_binary_ca_pem_start");
 extern const uint8_t ca_pem_end[]   asm("_binary_ca_pem_end");
@@ -339,6 +345,24 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             mqtt_backoff_ms = 1000; // Reset backoff al conectar
             mqtt_is_connected = true; // Actualizamos el estado de conexión
+
+            // Enviamos el motivo de reinicio por MQTT SOLO si es la primera vez después de un reinicio real
+            if (!motivo_reinicio_enviado) {
+                // Verificamos que sea un reinicio real y no una reconexión tras pérdida de internet
+                if (motivo_reinicio_global != ESP_RST_UNKNOWN) {
+                    // Creamos un tópico específico para este tipo de mensajes
+                    char reinicio_topic[128];
+                    snprintf(reinicio_topic, sizeof(reinicio_topic), "dispositivos/reinicio/%s", mac_clean);
+                    
+                    mqtt_service_enviar_json(reinicio_topic, 1, 0, 
+                                           "mac", mac_clean, 
+                                           "motivo", str_motivo_reinicio_global, 
+                                           "codigo", esp_reset_reason_to_str(motivo_reinicio_global), NULL);
+                    
+                    ESP_LOGI(TAG, "Motivo de reinicio enviado por MQTT: %s", str_motivo_reinicio_global);
+                    motivo_reinicio_enviado = true; // Marcamos como enviado para no repetirlo en reconexiones
+                }
+            }
         }
         break;
         
@@ -392,6 +416,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
         break;
     }
+}
+
+// Función auxiliar para convertir el enum a string
+const char* esp_reset_reason_to_str(esp_reset_reason_t reason) {
+    static char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%d", reason);
+    return buffer;
 }
 
 //========================================================================================================================================================================
@@ -542,6 +573,10 @@ void mqtt_service_stop(void)
         esp_mqtt_client_destroy(mqtt_client);
         mqtt_client = NULL;
         mqtt_is_connected = false; // Asegurarse de actualizar el estado
+        
+        // NO reseteamos la bandera motivo_reinicio_enviado aquí,
+        // ya que queremos que permanezca true hasta el próximo reinicio real
+        
         ESP_LOGI(TAG, "MQTT service stopped and resources released");
     }
 }

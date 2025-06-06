@@ -63,6 +63,14 @@ extern "C"
      */
     bool mqtt_service_esta_conectado(void);
 
+    /**
+     * @brief Convierte el enum esp_reset_reason_t a string
+     * 
+     * @param reason El motivo del reinicio
+     * @return const char* Representación en string del código
+     */
+    const char* esp_reset_reason_to_str(esp_reset_reason_t reason);
+
 #ifdef __cplusplus
 }
 #endif
