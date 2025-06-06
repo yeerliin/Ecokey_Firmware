@@ -297,7 +297,7 @@ static void aplicar_modo_termico(ble_thermal_mode_t nuevo_modo)
             ESP_LOGW(TAG, "Modo térmico ADVERTENCIA: Reduciendo actividad BLE");
             if (s_escaneo_activo) {
                 ble_scanner_detener();
-                iniciar_escaneo_con_modo(BLE_THERMAL_MODE_WARNING);
+                iniciar_escaneo_con_modo(BLE_THERMAL_MODE_NORMAL);
             }
             break;
             
@@ -305,6 +305,7 @@ static void aplicar_modo_termico(ble_thermal_mode_t nuevo_modo)
             ESP_LOGE(TAG, "Modo térmico CRÍTICO: Deteniendo escaneo BLE");
             if (s_escaneo_activo) {
                 ble_scanner_detener();
+                iniciar_escaneo_con_modo(BLE_THERMAL_MODE_WARNING);
                 // En modo crítico, no reiniciamos el escaneo
             }
             break;

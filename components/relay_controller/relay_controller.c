@@ -8,7 +8,7 @@
 static const char *TAG = "RELAY_CONTROLLER";
 
 // Configuración fija para el relé
-#define RELAY_GPIO_PIN 7      // Pin fijo para el relé
+#define RELAY_GPIO_PIN 18      // Pin fijo para el relé
 #define RELAY_ACTIVE_HIGH true // Siempre activo en nivel alto
 
 static bool relay_state = false;

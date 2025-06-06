@@ -21,6 +21,8 @@
 #include "relay_controller.h"
 #include "app_control.h"
 #include "estado_automatico.h"
+#include "ota_service.h"
+
 
 extern const uint8_t ca_pem_start[] asm("_binary_ca_pem_start");
 extern const uint8_t ca_pem_end[]   asm("_binary_ca_pem_end");
@@ -210,7 +212,8 @@ static void procesar_mensaje_ota(const char *json) {
                     
             // Aquí iniciarías el proceso OTA con el firmware_url
             // Por ejemplo, llamando a una función de un componente OTA:
-            // ota_service_start_update(firmware_url, forzar);
+            ota_service_start_update(url_str, forzar);
+            
             
             // Reportar que se ha recibido la solicitud de actualización
             ultimo_mensaje_ota_enviado = esp_log_timestamp(); // Marca temporal
