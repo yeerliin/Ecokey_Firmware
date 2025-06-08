@@ -4,6 +4,7 @@
 #include "mqtt_service.h"
 #include "wifi_sta.h"
 #include "time_manager.h"
+#include "app_control.h"
 #include "string.h"
 
 static const char *TAG = "RELAY_CONTROLLER";
@@ -20,17 +21,31 @@ static void enviar_estado_actual_y_historico(const char *mac_topic, const char *
     char fecha_actual[24] = {0};
     esp_err_t fecha_ok = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
 
+    // Obtener el modo actual para incluirlo en el reporte
+    estado_app_t estado_actual = app_control_obtener_estado_actual();
+    const char *modo_str = (estado_actual == ESTADO_MANUAL) ? "manual" : "automatico";
+
     // Tópico de estado actual
     char topic_estado[64];
     snprintf(topic_estado, sizeof(topic_estado), "dispositivos/%s/estado", mac_topic);
 
+    // Para cambios normales del relé, incluimos TipoReporte "cambio" y Modo
     if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
-        mqtt_service_enviar_json(topic_estado, 2, 1, "Estado", estado_str, "Fecha", fecha_actual, NULL);
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str, 
+                               "Modo", modo_str,
+                               "Fecha", fecha_actual,
+                               "TipoReporte", "cambio",
+                               NULL);
     } else {
-        mqtt_service_enviar_json(topic_estado, 2, 1, "Estado", estado_str, NULL);
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str,
+                               "Modo", modo_str,
+                               "TipoReporte", "cambio",
+                               NULL);
     }
 
-    // Tópico histórico con fecha (solo si hay fecha)
+    // Tópico histórico con fecha (solo si hay fecha) - también incluye Modo
     if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
         char fecha_formateada[24] = {0};
         const char *src = fecha_actual;
@@ -44,7 +59,12 @@ static void enviar_estado_actual_y_historico(const char *mac_topic, const char *
 
         char topic_historico[96];
         snprintf(topic_historico, sizeof(topic_historico), "dispositivos/%s/historial/%s", mac_topic, fecha_formateada);
-        mqtt_service_enviar_json(topic_historico, 2, 1, "Estado", estado_str, "Fecha", fecha_actual, NULL);
+        mqtt_service_enviar_json(topic_historico, 2, 1, 
+                               "Estado", estado_str, 
+                               "Modo", modo_str,
+                               "Fecha", fecha_actual,
+                               "TipoReporte", "historico",
+                               NULL);
     }
 }
 
@@ -177,4 +197,52 @@ esp_err_t relay_controller_pulse(uint32_t duration_ms)
 
     // Desactivar el relé
     return relay_controller_deactivate();
+}
+
+esp_err_t relay_controller_reportar_estado_inicial(void)
+{
+    if (!relay_initialized)
+    {
+        ESP_LOGE(TAG, "El controlador del relé no ha sido inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const char *mac_topic = sta_wifi_get_mac_clean();
+    if (!mac_topic) {
+        ESP_LOGW(TAG, "MAC no disponible para reporte inicial");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    const char *estado_str = relay_state ? "Encendido" : "Apagado";
+    
+    // Obtener el modo actual para incluirlo en el reporte
+    estado_app_t estado_actual = app_control_obtener_estado_actual();
+    const char *modo_str = (estado_actual == ESTADO_MANUAL) ? "manual" : "automatico";
+    
+    char fecha_actual[24] = {0};
+    esp_err_t fecha_ok = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
+    
+    // Tópico de estado actual
+    char topic_estado[64];
+    snprintf(topic_estado, sizeof(topic_estado), "dispositivos/%s/estado", mac_topic);
+    
+     ESP_LOGI(TAG, "Reportando estado inicial del relé: %s, modo: %s", estado_str, modo_str);
+    
+    // Reporte inicial con los mismos campos que los demás reportes
+    if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str, 
+                               "Modo", modo_str,
+                               "Fecha", fecha_actual,
+                               "TipoReporte", "inicial",
+                               NULL);
+    } else {
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str,
+                               "Modo", modo_str,
+                               "TipoReporte", "inicial",
+                               NULL);
+    }
+    
+    return ESP_OK;
 }

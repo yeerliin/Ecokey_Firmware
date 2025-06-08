@@ -378,6 +378,55 @@ static void mqtt_service_procesar_mensaje(const char *topic, const char *json)
     }
 }
 
+// Función para enviar el estado actual del relé al conectarse
+static void enviar_estado_actual_rele(void)
+{
+    const char *mac_topic = sta_wifi_get_mac_clean();
+    if (!mac_topic) {
+        ESP_LOGW(TAG, "MAC no disponible para reporte de estado inicial");
+        return;
+    }
+    
+    // Obtener el estado actual del relé
+    bool estado_rele = false;
+    esp_err_t ret = relay_controller_get_state(&estado_rele);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "No se pudo obtener el estado del relé: %s", esp_err_to_name(ret));
+        return;
+    }
+    
+    // Obtener información adicional del estado actual
+    estado_app_t estado_actual = app_control_obtener_estado_actual();
+    const char *modo_str = (estado_actual == ESTADO_MANUAL) ? "manual" : "automatico";
+    const char *estado_str = estado_rele ? "Encendido" : "Apagado";
+    
+    char fecha_actual[24] = {0};
+    esp_err_t fecha_ok = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
+    
+    // Tópico de estado actual
+    char topic_estado[64];
+    snprintf(topic_estado, sizeof(topic_estado), "dispositivos/%s/estado", mac_topic);
+    
+    ESP_LOGI(TAG, "Reportando estado actual post-reinicio: %s, modo: %s", estado_str, modo_str);
+    
+    // Enviar estado actual con retain=1 y formato estandarizado
+    if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str,
+                               "Modo", modo_str,
+                               "Fecha", fecha_actual,
+                               "TipoReporte", "post_reinicio",
+                               NULL);
+    } else {
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str,
+                               "Modo", modo_str,
+                               "TipoReporte", "post_reinicio",
+                               NULL);
+    }
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
@@ -454,6 +503,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     motivo_reinicio_enviado = true; // Marcamos como enviado para no repetirlo en reconexiones
                 }
             }
+            
+            // NUEVO: Enviar estado actual del relé después de conectarse
+            // Pequeño delay para asegurar que la conexión esté estable
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            enviar_estado_actual_rele();
         }
         break;
         

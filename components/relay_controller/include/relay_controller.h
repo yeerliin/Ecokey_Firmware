@@ -70,6 +70,17 @@ esp_err_t relay_controller_get_state(bool *state);
  */
 esp_err_t relay_controller_pulse(uint32_t duration_ms);
 
+/**
+ * @brief Reporta el estado actual del relé por MQTT
+ * 
+ * Útil para sincronizar el estado después de un reinicio o reconexión.
+ * 
+ * @return
+ *      - ESP_OK si la operación fue exitosa
+ *      - ESP_ERR_INVALID_STATE si el controlador no ha sido inicializado
+ */
+esp_err_t relay_controller_reportar_estado_inicial(void);
+
 #ifdef __cplusplus
 }
 #endif
