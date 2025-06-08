@@ -20,8 +20,111 @@
 #include "mqtt_service.h"
 #include "time_manager.h"
 
+// === NUEVOS INCLUDES PARA DIAGNÓSTICO DE MEMORIA ===
+#include "esp_heap_caps.h"
+#include "esp_system.h"
+#include "freertos/task.h"
+
 // Etiqueta para los mensajes de log de este módulo
 static const char *TAG = "APP_CONTROL";
+
+// === CONSTANTES PARA DIAGNÓSTICO DE MEMORIA ===
+#define MEMORY_LOW_THRESHOLD_BYTES    (10 * 1024)  // 10KB umbral crítico
+#define MEMORY_WARNING_THRESHOLD_BYTES (20 * 1024)  // 20KB umbral advertencia
+#define STACK_USAGE_WARNING_BYTES     (1024)       // 1KB advertencia stack
+
+// === FUNCIONES DE DIAGNÓSTICO DE MEMORIA ===
+
+/**
+ * @brief Obtiene información detallada del heap
+ * 
+ * Esta función es segura para llamar desde cualquier contexto y 
+ * no modifica el comportamiento existente del sistema.
+ */
+static void diagnostico_heap_info(void)
+{
+    size_t free_heap = esp_get_free_heap_size();
+    size_t min_free_heap = esp_get_minimum_free_heap_size();
+    size_t largest_free_block = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+    
+    ESP_LOGD(TAG, "[MEMORY] Heap libre: %u bytes, mínimo histórico: %u bytes, bloque más grande: %u bytes",
+             free_heap, min_free_heap, largest_free_block);
+}
+
+/**
+ * @brief Verifica si la memoria disponible está en niveles críticos
+ * 
+ * @return true si la memoria está en nivel crítico, false si es suficiente
+ */
+static bool diagnostico_memoria_critica(void)
+{
+    size_t free_heap = esp_get_free_heap_size();
+    size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+    
+    bool critico = (free_heap < MEMORY_LOW_THRESHOLD_BYTES) || 
+                   (largest_block < (MEMORY_LOW_THRESHOLD_BYTES / 2));
+    
+    if (critico) {
+        ESP_LOGW(TAG, "[MEMORY] CRÍTICO: Heap libre: %u bytes, bloque más grande: %u bytes", 
+                 free_heap, largest_block);
+    }
+    
+    return critico;
+}
+
+/**
+ * @brief Registra advertencia si la memoria está en nivel de advertencia
+ * 
+ * @return true si se registró una advertencia, false si la memoria es suficiente
+ */
+static bool diagnostico_memoria_advertencia(void)
+{
+    size_t free_heap = esp_get_free_heap_size();
+    
+    if (free_heap < MEMORY_WARNING_THRESHOLD_BYTES && free_heap >= MEMORY_LOW_THRESHOLD_BYTES) {
+        ESP_LOGW(TAG, "[MEMORY] ADVERTENCIA: Memoria baja: %u bytes libres", free_heap);
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @brief Verifica el uso del stack de la tarea actual
+ * 
+ * Esta función es útil para detectar posibles desbordamientos de stack
+ */
+static void diagnostico_stack_usage(void)
+{
+    TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
+    UBaseType_t stack_high_water = uxTaskGetStackHighWaterMark(current_task);
+    
+    // Convertir a bytes (cada word son 4 bytes en ESP32)
+    size_t stack_free_bytes = stack_high_water * sizeof(StackType_t);
+    
+    if (stack_free_bytes < STACK_USAGE_WARNING_BYTES) {
+        ESP_LOGW(TAG, "[MEMORY] Stack bajo en tarea actual: %u bytes libres", stack_free_bytes);
+    } else {
+        ESP_LOGD(TAG, "[MEMORY] Stack OK: %u bytes libres", stack_free_bytes);
+    }
+}
+
+/**
+ * @brief Función integral de diagnóstico que ejecuta todas las verificaciones
+ * 
+ * Esta función puede ser llamada desde cualquier punto del código para
+ * obtener un reporte completo del estado de la memoria.
+ */
+static void diagnostico_memoria_completo(void)
+{
+    ESP_LOGD(TAG, "[MEMORY] === DIAGNÓSTICO COMPLETO ===");
+    diagnostico_heap_info();
+    diagnostico_memoria_critica();
+    diagnostico_memoria_advertencia();
+    diagnostico_stack_usage();
+    ESP_LOGD(TAG, "[MEMORY] === FIN DIAGNÓSTICO ===");
+}
+
 // Clave usada para guardar el estado actual en NVS
 #define NVS_KEY_ESTADO "app_estado"
 

@@ -4,15 +4,49 @@
 #include "mqtt_service.h"
 #include "wifi_sta.h"
 #include "time_manager.h"
+#include "string.h"
 
 static const char *TAG = "RELAY_CONTROLLER";
 
 // Configuración fija para el relé
-#define RELAY_GPIO_PIN 18      // Pin fijo para el relé
+#define RELAY_GPIO_PIN 7     // Pin fijo para el relé
 #define RELAY_ACTIVE_HIGH true // Siempre activo en nivel alto
 
 static bool relay_state = false;
 static bool relay_initialized = false;
+
+static void enviar_estado_actual_y_historico(const char *mac_topic, const char *estado_str)
+{
+    char fecha_actual[24] = {0};
+    esp_err_t fecha_ok = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
+
+    // Tópico de estado actual
+    char topic_estado[64];
+    snprintf(topic_estado, sizeof(topic_estado), "dispositivos/%s/estado", mac_topic);
+
+    if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
+        mqtt_service_enviar_json(topic_estado, 2, 1, "Estado", estado_str, "Fecha", fecha_actual, NULL);
+    } else {
+        mqtt_service_enviar_json(topic_estado, 2, 1, "Estado", estado_str, NULL);
+    }
+
+    // Tópico histórico con fecha (solo si hay fecha)
+    if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
+        char fecha_formateada[24] = {0};
+        const char *src = fecha_actual;
+        char *dst = fecha_formateada;
+        while (*src && (dst - fecha_formateada) < (int)sizeof(fecha_formateada) - 1) {
+            if (*src == ' ' || *src == ':') *dst++ = '_';
+            else if (*src == '-' || (*src >= '0' && *src <= '9')) *dst++ = *src;
+            src++;
+        }
+        *dst = '\0';
+
+        char topic_historico[96];
+        snprintf(topic_historico, sizeof(topic_historico), "dispositivos/%s/historial/%s", mac_topic, fecha_formateada);
+        mqtt_service_enviar_json(topic_historico, 2, 1, "Estado", estado_str, "Fecha", fecha_actual, NULL);
+    }
+}
 
 esp_err_t relay_controller_init(void)
 {
@@ -37,12 +71,14 @@ esp_err_t relay_controller_init(void)
         return ret;
     }
 
-    // Inicialmente desactivar el relé
+    // === POLÍTICA DE INICIALIZACIÓN SEGURA ===
+    // Siempre iniciar con el relé APAGADO tras un reinicio
+    // Cada modo de la aplicación decidirá si necesita encenderlo
     relay_state = false;
-    gpio_set_level(RELAY_GPIO_PIN, RELAY_ACTIVE_HIGH ? 0 : 1);
+    gpio_set_level(RELAY_GPIO_PIN, (RELAY_ACTIVE_HIGH && relay_state) ? 1 : 0);
 
     relay_initialized = true;
-    ESP_LOGI(TAG, "Relay controller inicializado en GPIO %d, activo en %s",
+    ESP_LOGI(TAG, "Relay controller inicializado en GPIO %d, activo en %s, estado inicial: APAGADO (seguro)",
              RELAY_GPIO_PIN, RELAY_ACTIVE_HIGH ? "ALTO" : "BAJO");
 
     return ESP_OK;
@@ -60,20 +96,10 @@ esp_err_t relay_controller_activate(void)
     {
         gpio_set_level(RELAY_GPIO_PIN, RELAY_ACTIVE_HIGH ? 1 : 0);
         relay_state = true;
-        const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
-        const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
-        char topic[64];
-        snprintf(topic, sizeof(topic), "dispositivos/%s/estado", mac_topic); // <-- Cambiado a /estado
-        char fecha_actual[24];
-        if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
-        {
-            mqtt_service_enviar_json(topic, 2, 1, "Estado", "Encendido", "Fecha", fecha_actual, NULL);
-            printf("Fecha actual: %s\n", fecha_actual);
-            // Ejemplo de salida: Fecha actual: 2024-06-10 15:23:45
-            return ESP_OK;
-        }
-        mqtt_service_enviar_json(topic, 2, 1, "Estado", "Encendido", NULL);
-        // Evento crítico: activación
+        
+        const char *mac_topic = sta_wifi_get_mac_clean();
+        enviar_estado_actual_y_historico(mac_topic, "Encendido");
+        ESP_LOGI(TAG, "Relé activado");
     }
 
     return ESP_OK;
@@ -91,20 +117,10 @@ esp_err_t relay_controller_deactivate(void)
     {
         gpio_set_level(RELAY_GPIO_PIN, RELAY_ACTIVE_HIGH ? 0 : 1);
         relay_state = false;
-        const char *mac = sta_wifi_get_mac_str();         // MAC con dos puntos para el JSON
-        const char *mac_topic = sta_wifi_get_mac_clean(); // MAC sin dos puntos para el topic
-        char topic[64];
-        snprintf(topic, sizeof(topic), "dispositivos/%s/estado", mac_topic); // <-- Cambiado a /estado
-        char fecha_actual[24];
-        if (time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual)) == ESP_OK)
-        {
-            mqtt_service_enviar_json(topic, 2, 1, "Estado", "Apagado", "Fecha", fecha_actual, NULL);
-            printf("Fecha actual: %s\n", fecha_actual);
-            // Ejemplo de salida: Fecha actual: 2024-06-10 15:23:45
-            return ESP_OK;
-        }
-        mqtt_service_enviar_json(topic, 2, 1, "MAC", mac, "Estado", "Apagado", NULL);
-        // Evento crítico: desactivación
+        
+        const char *mac_topic = sta_wifi_get_mac_clean();
+        enviar_estado_actual_y_historico(mac_topic, "Apagado");
+        ESP_LOGI(TAG, "Relé desactivado");
     }
 
     return ESP_OK;

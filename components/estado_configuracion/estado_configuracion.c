@@ -1,17 +1,34 @@
 #include "estado_configuracion.h"
 #include "esp_log.h"
-#include "esp_event.h"  // Añadir esta línea para esp_event_loop_delete_default()
-#include <stdbool.h>  // Añadido para tipos bool, true, false
+#include "esp_event.h"
+#include <stdbool.h>
 #include "app_control.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "led.h" // Añadido para controlar el LED
+#include "led.h"
 #include "wifi_provision_web.h"
-#include "nvs_manager.h" // Añadido para la gestión de NVS
-
+#include "nvs_manager.h"
+#include "resource_manager.h" // Nuevo componente de gestión de recursos
+#include "relay_controller.h" // Añadido para controlar el relé
 
 static const char *TAG = "ESTADO_CONFIG";
 static bool estado_activo = false;
+static resource_context_t resource_ctx; // Contexto de recursos
+
+/**
+ * @brief Cleanup específico para el estado de configuración
+ */
+static void cleanup_configuracion(void) {
+    // Detener el portal web si está activo
+    if (wifi_provision_web_is_running()) {
+        ESP_LOGI(TAG, "Deteniendo el portal de provisioning");
+        wifi_provision_web_stop();
+    }
+    
+    // Detener parpadeo del LED
+    led_blink_stop();
+    ESP_LOGI(TAG, "LED parpadeo detenido");
+}
 
 void info_NVS() {
     ESP_LOGI(TAG, "========== CONFIGURACIÓN COMPLETADA ==========");
@@ -47,11 +64,7 @@ void info_NVS() {
         ESP_LOGI(TAG, "Temporizador: [no encontrado]");
     }
 
-    
     ESP_LOGI(TAG, "==============================================");
-
-
-
 }
 
 static void provision_completed_callback(void) {
@@ -69,17 +82,42 @@ static void provision_completed_callback(void) {
 }
 
 esp_err_t estado_configuracion_iniciar(void) {
+    // Crear contexto de recursos
+    esp_err_t ret = resource_manager_create_context(RESOURCE_TYPE_CONFIGURACION, 
+                                                   NULL, // No hay tarea específica
+                                                   &resource_ctx);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al crear contexto de recursos: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    // Validar recursos antes de iniciar
+    ret = resource_manager_validate(&resource_ctx);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Validación de recursos falló: %s", esp_err_to_name(ret));
+        return ret;
+    }
     
     if (estado_activo) {
         ESP_LOGW(TAG, "Estado configuración ya está activo");
         return ESP_OK;
     }
     
+    resource_manager_monitor(&resource_ctx, "inicio");
     ESP_LOGI(TAG, "Iniciando el modo configuración");
     estado_activo = true;
+    resource_manager_set_active(&resource_ctx, true);
+
+    // === POLÍTICA DEL MODO CONFIGURACIÓN ===
+    // En modo configuración, el relé debe estar APAGADO
+    // No tiene sentido que esté encendido durante la configuración
+    relay_controller_set_state(false);
+    ESP_LOGI(TAG, "Relé desactivado durante configuración");
 
     // Iniciar parpadeo del LED (ejemplo: 500 ms)
     led_blink_start(500);
+    
+    resource_manager_monitor(&resource_ctx, "post-led");
     
     // Configurar el portal web de provisioning
     wifi_prov_web_config_t cfg = {
@@ -90,13 +128,18 @@ esp_err_t estado_configuracion_iniciar(void) {
     };
     
     // Iniciar el portal web de provisioning
-    esp_err_t ret = wifi_provision_web_start(&cfg);
+    ret = wifi_provision_web_start(&cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Error al iniciar el portal de provisioning: %s", esp_err_to_name(ret));
+        resource_manager_cleanup(&resource_ctx, cleanup_configuracion);
+        estado_activo = false;
         return ret;
     }
     
+    resource_manager_monitor(&resource_ctx, "post-web-server");
     ESP_LOGI(TAG, "Portal de configuración WiFi iniciado");
+    ESP_LOGI(TAG, "=== ESTADO CONFIGURACIÓN INICIADO CORRECTAMENTE ===");
+    
     return ESP_OK;
 }
 
@@ -106,21 +149,22 @@ esp_err_t estado_configuracion_detener(void) {
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "Deteniendo el modo configuración");
+    ESP_LOGI(TAG, "=== DETENIENDO ESTADO CONFIGURACIÓN ===");
+    resource_manager_monitor(&resource_ctx, "pre-detener");
 
-    if (wifi_provision_web_is_running()) {
-        ESP_LOGI(TAG, "Deteniendo el portal de provisioning");
-        wifi_provision_web_stop(); // Detener el servicio de provisioning
-    } else {
-        ESP_LOGW(TAG, "El portal de provisioning no está activo");
-    }
+    // Cleanup usando el gestor de recursos
+    resource_manager_cleanup(&resource_ctx, cleanup_configuracion);
     
     // Asegúrate de eliminar el event loop antes de salir
     esp_event_loop_delete_default();
-    
-    // Detener parpadeo del LED
-    led_blink_stop();
 
     estado_activo = false;
+    
+    // Verificar fugas de memoria
+    resource_manager_check_memory_leak(&resource_ctx);
+    
+    resource_manager_monitor(&resource_ctx, "post-detener");
+    ESP_LOGI(TAG, "=== ESTADO CONFIGURACIÓN DETENIDO ===");
+    
     return ESP_OK;
 }

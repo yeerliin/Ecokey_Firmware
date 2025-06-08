@@ -22,6 +22,7 @@
 #include "app_control.h"
 #include "estado_automatico.h"
 #include "ota_service.h"
+#include "time_manager.h" // Asegúrate de incluir esta cabecera si no lo está ya
 
 // Declaración externa de la variable del motivo de reinicio
 extern esp_reset_reason_t motivo_reinicio_global;
@@ -51,6 +52,62 @@ static bool mqtt_is_connected = false;
 
 // Variable para controlar el procesamiento de mensajes OTA de respuesta
 static uint32_t ultimo_mensaje_ota_enviado = 0;
+
+// Cola para comunicar temperatura entre la tarea de sensor y la de MQTT
+static QueueHandle_t temp_mqtt_queue = NULL;
+static TaskHandle_t temp_mqtt_task_handle = NULL;
+
+// Estructura para datos de temperatura
+typedef struct {
+    float temperatura;
+    uint32_t timestamp;
+} temp_data_t;
+
+// Tarea dedicada para el envío de temperatura por MQTT
+static void temp_mqtt_task(void *pvParameters)
+{
+    temp_data_t temp_data;
+    char temp_topic[96];
+    char temp_str[16];
+    char timestamp_str[16];
+    
+    ESP_LOGI(TAG, "Tarea de envío de temperatura iniciada");
+    
+    while (1) {
+        // Esperar a recibir temperatura (con timeout corto para evitar bloqueo)
+        if (xQueueReceive(temp_mqtt_queue, &temp_data, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            // Si no hay conexión MQTT, descartamos la temperatura pero no bloqueamos
+            if (!mqtt_is_connected || mqtt_client == NULL) {
+                ESP_LOGW(TAG, "MQTT no conectado, descartando temperatura: %.2f°C", temp_data.temperatura);
+                continue;
+            }
+            
+            // Crear string de temperatura con precisión de 2 decimales
+            snprintf(temp_str, sizeof(temp_str), "%.2f", temp_data.temperatura);
+            snprintf(timestamp_str, sizeof(timestamp_str), "%lu", temp_data.timestamp);
+            
+            // Obtener MAC sin dos puntos
+            const char *mac_clean = sta_wifi_get_mac_clean();
+            if (mac_clean == NULL || strlen(mac_clean) < 1) {
+                ESP_LOGW(TAG, "MAC no disponible, descartando temperatura");
+                continue;
+            }
+            
+            // Construir tópico de temperatura
+            snprintf(temp_topic, sizeof(temp_topic), "dispositivos/%s/temperatura", mac_clean);
+            
+            // Publicar usando función no bloqueante
+            ESP_LOGI(TAG, "Enviando temperatura: %s°C por MQTT", temp_str);
+            mqtt_service_enviar_json(temp_topic, 0, 0, 
+                                   "temperatura", temp_str, 
+                                   "timestamp", timestamp_str, 
+                                   NULL);
+        }
+        
+        // Ceder CPU periódicamente para evitar watchdog
+        vTaskDelay(pdMS_TO_TICKS(10)); // Pequeña pausa para no consumir CPU
+    }
+}
 
 // Tarea dedicada para reconexión con backoff
 static void mqtt_reconnect_task(void *pvParameters)
@@ -350,14 +407,48 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             if (!motivo_reinicio_enviado) {
                 // Verificamos que sea un reinicio real y no una reconexión tras pérdida de internet
                 if (motivo_reinicio_global != ESP_RST_UNKNOWN) {
-                    // Creamos un tópico específico para este tipo de mensajes
-                    char reinicio_topic[128];
-                    snprintf(reinicio_topic, sizeof(reinicio_topic), "dispositivos/reinicio/%s", mac_clean);
+                    char fecha_actual[24] = {0}; // Buffer para la fecha
+                    char reinicio_topic[160]; // Buffer más grande para acomodar la fecha
                     
-                    mqtt_service_enviar_json(reinicio_topic, 1, 0, 
+                    // Intentar obtener la fecha actual
+                    esp_err_t fecha_err = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
+                    
+                    if (fecha_err == ESP_OK && strlen(fecha_actual) > 0) {
+                        // Formatear el tópico con la fecha (reemplazando espacios y caracteres no válidos)
+                        char fecha_formateada[24] = {0};
+                        const char *src = fecha_actual;
+                        char *dst = fecha_formateada;
+                        
+                        // Convertir la fecha a un formato adecuado para tópico MQTT (sin espacios ni caracteres especiales)
+                        while (*src != '\0' && (dst - fecha_formateada) < sizeof(fecha_formateada) - 1) {
+                            if (*src == ' ' || *src == ':') {
+                                *dst++ = '_'; // Reemplazar espacio o dos puntos con guión bajo
+                            } else if (*src == '-' || (*src >= '0' && *src <= '9')) {
+                                *dst++ = *src; // Mantener guiones y números
+                            }
+                            src++;
+                        }
+                        *dst = '\0'; // Terminar la cadena
+                        
+                        // Crear el tópico con la fecha formateada
+                        snprintf(reinicio_topic, sizeof(reinicio_topic), 
+                                "dispositivos/%s/reinicio/%s", mac_clean, fecha_formateada);
+                        
+                        ESP_LOGI(TAG, "Publicando reinicio en tópico con fecha: %s", reinicio_topic);
+                    } else {
+                        // Si no hay fecha disponible, usar el tópico sin fecha
+                        snprintf(reinicio_topic, sizeof(reinicio_topic), 
+                                "dispositivos/reinicio/%s", mac_clean);
+                        
+                        ESP_LOGW(TAG, "Fecha no disponible, usando tópico sin fecha: %s", reinicio_topic);
+                    }
+                    
+                    mqtt_service_enviar_json(reinicio_topic, 2, 1, 
                                            "mac", mac_clean, 
                                            "motivo", str_motivo_reinicio_global, 
-                                           "codigo", esp_reset_reason_to_str(motivo_reinicio_global), NULL);
+                                           "codigo", esp_reset_reason_to_str(motivo_reinicio_global), 
+                                           "fecha", (fecha_err == ESP_OK) ? fecha_actual : "desconocida",
+                                           NULL);
                     
                     ESP_LOGI(TAG, "Motivo de reinicio enviado por MQTT: %s", str_motivo_reinicio_global);
                     motivo_reinicio_enviado = true; // Marcamos como enviado para no repetirlo en reconexiones
@@ -505,6 +596,26 @@ void mqtt_service_enviar_json(const char *topic, int qos, int retain, ...)
     mqtt_service_enviar_dato(topic, json_buffer, qos, retain);
 }
 
+void mqtt_service_notificar_temperatura(float temperatura)
+{
+    if (!temp_mqtt_queue) {
+        ESP_LOGW(TAG, "Cola de temperatura no inicializada, descartando lectura: %.2f°C", temperatura);
+        return;
+    }
+    
+    // Crear estructura con datos de temperatura
+    temp_data_t temp_data = {
+        .temperatura = temperatura,
+        .timestamp = esp_log_timestamp() // Timestamp en milisegundos desde el inicio
+    };
+    
+    // Enviar a la cola con timeout corto para no bloquear 
+    // Si la cola está llena, mejor descartar que bloquear
+    if (xQueueSend(temp_mqtt_queue, &temp_data, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "Cola de temperatura llena, descartando lectura: %.2f°C", temperatura);
+    }
+}
+
 void mqtt_service_start(void)
 {
     if (mqtt_client != NULL)
@@ -558,6 +669,31 @@ void mqtt_service_start(void)
     if (mqtt_reconnect_task_handle == NULL) {
         xTaskCreate(mqtt_reconnect_task, "mqtt_reconnect_task", 4096, NULL, 5, &mqtt_reconnect_task_handle);
     }
+    
+    // Crear la cola de temperatura si no existe
+    if (temp_mqtt_queue == NULL) {
+        temp_mqtt_queue = xQueueCreate(5, sizeof(temp_data_t));
+        if (!temp_mqtt_queue) {
+            ESP_LOGE(TAG, "Error creando cola para temperatura");
+        }
+    }
+    
+    // Crear la tarea para envío de temperatura si no existe
+    if (temp_mqtt_task_handle == NULL) {
+        BaseType_t res = xTaskCreatePinnedToCore(
+                                    temp_mqtt_task, 
+                                    "temp_mqtt_task", 
+                                    3072,           // Stack size 
+                                    NULL,           // Task parameters
+                                    tskIDLE_PRIORITY + 3, // Prioridad media
+                                    &temp_mqtt_task_handle,
+                                    APP_CPU_NUM);   // Ejecutar en APP_CPU
+        if (res != pdPASS) {
+            ESP_LOGE(TAG, "Error creando tarea para temperatura");
+        } else {
+            ESP_LOGI(TAG, "Tarea de envío MQTT de temperatura creada correctamente");
+        }
+    }
 }
 
 void mqtt_service_stop(void)
@@ -578,5 +714,17 @@ void mqtt_service_stop(void)
         // ya que queremos que permanezca true hasta el próximo reinicio real
         
         ESP_LOGI(TAG, "MQTT service stopped and resources released");
+    }
+    
+    // Detener y eliminar la tarea de temperatura
+    if (temp_mqtt_task_handle != NULL) {
+        vTaskDelete(temp_mqtt_task_handle);
+        temp_mqtt_task_handle = NULL;
+    }
+    
+    // Eliminar la cola
+    if (temp_mqtt_queue != NULL) {
+        vQueueDelete(temp_mqtt_queue);
+        temp_mqtt_queue = NULL;
     }
 }

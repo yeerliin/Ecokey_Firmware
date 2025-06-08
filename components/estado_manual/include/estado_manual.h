@@ -31,3 +31,10 @@ esp_err_t estado_manual_alternar_rele(void);
  * @return ESP_OK si se obtuvo correctamente
  */
 esp_err_t estado_manual_obtener_estado_rele(bool *estado);
+
+/**
+ * @brief Verifica si el estado manual está activo
+ * 
+ * @return true si está activo, false en caso contrario
+ */
+bool estado_manual_esta_activo(void);

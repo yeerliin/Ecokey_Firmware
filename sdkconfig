@@ -2402,6 +2402,13 @@ CONFIG_MQTT_PASSWORD="yerlin1234"
 # end of MQTT Configuration
 
 #
+# Configuración del sensor de temperatura
+#
+CONFIG_TEMP_READ_INTERVAL_MS=30000
+CONFIG_TEMP_WATCHDOG_ENABLED=y
+# end of Configuración del sensor de temperatura
+
+#
 # Configuración de Time Manager
 #
 CONFIG_TIME_MANAGER_DEFAULT_NTP_SERVER="pool.ntp.org"

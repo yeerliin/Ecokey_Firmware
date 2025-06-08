@@ -57,6 +57,16 @@ extern "C"
     void mqtt_service_enviar_json(const char *topic, int qos, int retain, ...);
 
     /**
+     * @brief Notifica una nueva lectura de temperatura para envío por MQTT.
+     * 
+     * Esta función es no bloqueante y segura para llamar desde tareas de sensores.
+     * Si la cola está llena o MQTT no está disponible, la temperatura se descarta.
+     * 
+     * @param temperatura La temperatura en grados Celsius
+     */
+    void mqtt_service_notificar_temperatura(float temperatura);
+
+    /**
      * @brief Obtiene si el cliente MQTT está conectado actualmente
      * 
      * @return true si está conectado, false en caso contrario
