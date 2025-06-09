@@ -10,6 +10,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_tls.h"
+#include "nvs_flash.h"
+#include "wifi_sta.h"
 
 static const char *TAG = "APP_INIT";
 
@@ -22,18 +24,39 @@ esp_err_t inicializar_componentes(void)
 {
     esp_err_t ret;
 
-    // 1. Inicializar NVS (paso crítico)
-    ret = nvs_manager_init(NULL); // Usar namespace por defecto
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Error crítico al inicializar NVS Manager");
+    // Inicializar NVS Flash
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "Borrando y reinicializando NVS...");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Inicializar NVS Manager
+    ret = nvs_manager_init(NULL);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al inicializar NVS Manager: %s", esp_err_to_name(ret));
         return ret;
+    }
+
+    // Inicializar WiFi en modo estación
+    ret = sta_wifi_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al inicializar WiFi: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Guardar explícitamente credenciales WiFi de Kconfig en NVS
+    ret = sta_wifi_save_kconfig_to_nvs();
+    if (ret != ESP_OK && ret != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "No se pudieron guardar credenciales WiFi de Kconfig: %s", esp_err_to_name(ret));
     }
 
     // Pausa más larga para asegurar que NVS esté listo
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    // 2. Inicializar LED
+    // Inicializar LED
     ESP_LOGI(TAG, "Inicializando LED...");
     ret = led_init();
     if (ret != ESP_OK)
@@ -43,7 +66,7 @@ esp_err_t inicializar_componentes(void)
     }
     led_blink_start(100);
 
-    // 3. Inicializar Relay Controller
+    // Inicializar Relay Controller
     ESP_LOGI(TAG, "Inicializando Relay Controller...");
     ret = relay_controller_init();
     if (ret != ESP_OK)
@@ -55,7 +78,7 @@ esp_err_t inicializar_componentes(void)
     // Pausa corta
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    // 6. Inicializar el control boton (solo inicialización interna)
+    // Inicializar el control boton (solo inicialización interna)
     ESP_LOGI(TAG, "Inicializando control por boton...");
     ret = control_button_iniciar();
     if (ret != ESP_OK)

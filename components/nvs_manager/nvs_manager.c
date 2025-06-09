@@ -637,4 +637,74 @@ esp_err_t nvs_manager_delete_wifi_credentials(void)
     return ret;
 }
 
+/**
+ * @brief Guarda las credenciales WiFi en NVS
+ * 
+ * @param ssid SSID de la red WiFi
+ * @param password Contraseña de la red WiFi (puede ser NULL o cadena vacía para redes abiertas)
+ * @return esp_err_t ESP_OK si se guardaron correctamente
+ */
+esp_err_t nvs_manager_set_wifi_credentials(const char *ssid, const char *password)
+{
+    if (!s_initialized) {
+        ESP_LOGE(TAG, "NVS Manager no inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (ssid == NULL || strlen(ssid) == 0) {
+        ESP_LOGE(TAG, "SSID no válido");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret;
+    nvs_handle_t nvs_handle;
+
+    // Abrir el espacio NVS para escritura
+    ret = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al abrir NVS para escritura: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Guardar el SSID
+    ret = nvs_set_str(nvs_handle, WIFI_SSID_KEY, ssid);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al guardar SSID: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    // Guardar la contraseña (si se proporciona)
+    if (password != NULL) {
+        ret = nvs_set_str(nvs_handle, WIFI_PASS_KEY, password);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al guardar contraseña: %s", esp_err_to_name(ret));
+            nvs_close(nvs_handle);
+            return ret;
+        }
+    } else {
+        // Si no se proporciona contraseña, guardar cadena vacía
+        ret = nvs_set_str(nvs_handle, WIFI_PASS_KEY, "");
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al guardar contraseña vacía: %s", esp_err_to_name(ret));
+            nvs_close(nvs_handle);
+            return ret;
+        }
+    }
+
+    // Confirmar los cambios en NVS
+    ret = nvs_commit(nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al hacer commit en NVS: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    // Cerrar el espacio NVS
+    nvs_close(nvs_handle);
+    
+    ESP_LOGI(TAG, "Credenciales WiFi guardadas correctamente en NVS. SSID: %s", ssid);
+    return ESP_OK;
+}
+
 

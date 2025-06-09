@@ -218,6 +218,15 @@ esp_err_t nvs_manager_save_wifi_credentials(const char *ssid, const char *passwo
  */
 esp_err_t nvs_manager_delete_wifi_credentials(void);
 
+/**
+ * @brief Guarda las credenciales WiFi en NVS
+ * 
+ * @param ssid SSID de la red WiFi
+ * @param password Contraseña de la red WiFi (puede ser NULL o cadena vacía para redes abiertas)
+ * @return esp_err_t ESP_OK si se guardaron correctamente
+ */
+esp_err_t nvs_manager_set_wifi_credentials(const char *ssid, const char *password);
+
 #ifdef __cplusplus
 }
 #endif

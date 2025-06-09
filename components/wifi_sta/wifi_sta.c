@@ -564,7 +564,7 @@ const char *sta_wifi_get_mac_clean(void)
  * 
  * @param timeout_ms Tiempo de espera en ms (0 = esperar indefinidamente)
  * @return esp_err_t ESP_OK si se conecta correctamente, 
- *                   ESP_ERR_NOT_FOUND si no hay credenciales
+ *                   ESP_ERR_NOT_FOUND si no hay credenciales ni en NVS ni en Kconfig
  */
 esp_err_t sta_wifi_connect_with_nvs(uint32_t timeout_ms)
 {
@@ -589,28 +589,51 @@ esp_err_t sta_wifi_connect_with_nvs(uint32_t timeout_ms)
         }
     }
     
-    // Verificar si existen credenciales WiFi
-    if (!nvs_manager_has_wifi_credentials()) {
-        ESP_LOGW(TAG, "No hay credenciales WiFi almacenadas en NVS");
-        return ESP_ERR_NOT_FOUND;
-    }
-    
     // Buffers para las credenciales
     char nvs_ssid[33] = {0};
     char nvs_password[65] = {0};
     
-    // Obtener credenciales
-    esp_err_t ret = nvs_manager_get_wifi_credentials(nvs_ssid, sizeof(nvs_ssid), 
-                                                    nvs_password, sizeof(nvs_password));
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error al obtener credenciales WiFi: %s", esp_err_to_name(ret));
-        return ret;
+    // Primero intentar con credenciales de NVS
+    if (nvs_manager_has_wifi_credentials()) {
+        // Obtener credenciales de NVS
+        esp_err_t ret = nvs_manager_get_wifi_credentials(nvs_ssid, sizeof(nvs_ssid), 
+                                                        nvs_password, sizeof(nvs_password));
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Conectando con credenciales de NVS. SSID: %s", nvs_ssid);
+            return sta_wifi_connect(nvs_ssid, 
+                                  (nvs_password[0] != '\0' ? nvs_password : NULL), 
+                                  timeout_ms);
+        } else {
+            ESP_LOGW(TAG, "Error al obtener credenciales de NVS: %s", esp_err_to_name(ret));
+            // Continuamos para intentar con Kconfig
+        }
+    } else {
+        ESP_LOGW(TAG, "No hay credenciales WiFi almacenadas en NVS");
     }
     
-    ESP_LOGI(TAG, "Conectando con credenciales de NVS. SSID: %s", nvs_ssid);
-    return sta_wifi_connect(nvs_ssid, 
-                          (nvs_password[0] != '\0' ? nvs_password : NULL), 
-                          timeout_ms);
+    // Si llegamos aquí, no hay credenciales en NVS o hubo error al leerlas
+    // Intentar usar credenciales de Kconfig
+    #if defined(CONFIG_WIFI_STA_SSID)
+        const char *kconfig_ssid = CONFIG_WIFI_STA_SSID;
+        
+        // Verificar en tiempo de ejecución si el SSID es válido
+        if (kconfig_ssid != NULL && kconfig_ssid[0] != '\0') {
+            const char *kconfig_password = NULL;
+            
+            #if defined(CONFIG_WIFI_STA_PASSWORD) && !defined(CONFIG_WIFI_STA_OPEN_NETWORK)
+                kconfig_password = CONFIG_WIFI_STA_PASSWORD;
+            #endif
+            
+            ESP_LOGI(TAG, "Usando credenciales WiFi de Kconfig. SSID: %s", kconfig_ssid);
+            return sta_wifi_connect(kconfig_ssid, kconfig_password, timeout_ms);
+        } else {
+            ESP_LOGW(TAG, "SSID de Kconfig está vacío");
+        }
+    #endif
+
+    // Si llegamos aquí, no hay credenciales válidas
+    ESP_LOGW(TAG, "No hay credenciales WiFi configuradas ni en NVS ni en Kconfig");
+    return ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t sta_wifi_disconnect(void)
