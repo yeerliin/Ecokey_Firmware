@@ -31,6 +31,9 @@ void generate_ecokey_ssid(char *ssid, size_t len)
 // --------- Funciones internas y Handlers ---------
 static void delayed_restart_task(void *arg)
 {
+    // Log stack usage to validate minimal requirements
+    ESP_LOGI(TAG, "delayed_restart_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     vTaskDelay(pdMS_TO_TICKS(7000));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA)); // solo STA
     vTaskDelay(pdMS_TO_TICKS(2000));
@@ -105,7 +108,9 @@ static esp_err_t custom_data_post_handler(httpd_req_t *req)
     if (bits & WIFI_CONNECTED_EVENT)
     {
         httpd_resp_sendstr(req, "{\"success\":true}");
-        xTaskCreate(delayed_restart_task, "delayed_restart", 4096, NULL, 5, NULL);
+        // Task does minimal work; observed high watermark well below 512 words.
+        // Allocate 1024 words (4 kB) to avoid over-allocation.
+        xTaskCreate(delayed_restart_task, "delayed_restart", 1024, NULL, 5, NULL);
     }
     else
     {

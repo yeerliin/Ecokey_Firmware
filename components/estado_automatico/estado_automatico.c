@@ -55,6 +55,9 @@ static void automatico_task(void *param)
     const int64_t REINICIO_ESCANEO_MS = 30 * 60 * 1000; // 30 minutos
     int64_t ultimo_reinicio_escaneo = esp_timer_get_time() / 1000;
 
+    ESP_LOGI(TAG, "automatico_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
+
     while (estado_activo)
     {
         timeout_ms = automatico_timeout_ms; // Por si cambia en caliente

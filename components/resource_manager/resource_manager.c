@@ -16,13 +16,14 @@ static const resource_config_t resource_configs[] = {
     },
     [RESOURCE_TYPE_AUTOMATICO] = {
         .min_heap_required = 20 * 1024,    // 20KB
-        .min_stack_size = 4096,
+        // Automatico task observed <1k words usage, keep some margin
+        .min_stack_size = 2048,
         .warning_heap_level = 10 * 1024,   // 10KB
         .component_name = "AUTOMATICO"
     },
     [RESOURCE_TYPE_CONFIGURACION] = {
         .min_heap_required = 30 * 1024,    // 30KB
-        .min_stack_size = 4096,
+        .min_stack_size = 2048,
         .warning_heap_level = 15 * 1024,   // 15KB
         .component_name = "CONFIGURACION"
     }

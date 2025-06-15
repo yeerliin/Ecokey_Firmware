@@ -401,6 +401,8 @@ static estado_app_t estado_en_transicion = ESTADO_INVALIDO;
  */
 static void tarea_control_estado(void *param)
 {
+    ESP_LOGI(TAG, "tarea_control_estado watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     transicion_args_t args;
     while (1)
     {
@@ -469,7 +471,8 @@ esp_err_t app_control_lanzar_transicion(estado_app_t destino, const char *tag)
             ESP_LOGE(TAG, LOG_PREFIX_BOOT " No se pudieron crear recursos para transiciones");
             return ESP_ERR_NO_MEM;
         }
-        xTaskCreate(tarea_control_estado, "tarea_control_estado", 4096, NULL, tskIDLE_PRIORITY + 2, &tarea_control_estado_handle);
+        // Control task has low stack usage; allocate 2048 words
+        xTaskCreate(tarea_control_estado, "tarea_control_estado", 2048, NULL, tskIDLE_PRIORITY + 2, &tarea_control_estado_handle);
     }
 
     // Verificar si ya hay una transición en curso para el mismo destino

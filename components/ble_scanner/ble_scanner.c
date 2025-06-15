@@ -167,6 +167,8 @@ static void detection_task(void *param)
 {
     detection_info_t info;
     static bool primera_deteccion[BLE_SCANNER_MAX_TARGET_DEVICES] = {0};
+    ESP_LOGI(TAG, "detection_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
 
     while (1) {
         if (xQueueReceive(s_detection_queue, &info, portMAX_DELAY)) {
@@ -363,6 +365,9 @@ static void temp_monitor_task_s3(void *param)
     // **MEJORA: Contador de tiempo en emergencia para estadísticas**
     uint32_t tiempo_total_emergencia = 0;
     bool estaba_en_emergencia = false;
+
+    ESP_LOGI(TAG, "temp_monitor_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     
     configurar_parametros_escaneo_s3();
 
@@ -617,7 +622,8 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
     }
 
     // Crear tarea de procesamiento de detecciones
-    BaseType_t res = xTaskCreate(detection_task, "ble_detect_s3", 4096, NULL, 6, NULL);
+    // detection_task uses <1k words; reduce stack from 4096 to 2048 words
+    BaseType_t res = xTaskCreate(detection_task, "ble_detect_s3", 2048, NULL, 6, NULL);
     if (res != pdPASS) {
         ESP_LOGE(TAG, "❌ Error creando tarea de detección");
         vQueueDelete(s_detection_queue);
@@ -626,7 +632,8 @@ esp_err_t ble_scanner_iniciar(const ble_scanner_config_t *config)
 
     // Crear tarea de monitoreo térmico
     if (s_control_termico_activo) {
-        res = xTaskCreate(temp_monitor_task_s3, "temp_monitor_s3", 4096, NULL, 5, &s_temp_task_handle);
+        // temp_monitor_task_s3 allocates ~500 bytes of locals; 2048 words is enough
+        res = xTaskCreate(temp_monitor_task_s3, "temp_monitor_s3", 2048, NULL, 5, &s_temp_task_handle);
         if (res != pdPASS) {
             ESP_LOGE(TAG, "❌ Error creando tarea de monitoreo térmico");
         } else {

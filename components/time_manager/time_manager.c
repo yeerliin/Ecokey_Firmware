@@ -102,6 +102,8 @@ esp_err_t time_manager_sync_ntp(void)
 
 static void time_manager_sync_task(void *arg)
 {
+    ESP_LOGI(TAG, "time_manager_sync_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     while (1) {
         // Espera el intervalo configurado
         vTaskDelay(pdMS_TO_TICKS(s_sync_interval_min * 60 * 1000));
@@ -119,7 +121,7 @@ esp_err_t time_manager_start_auto_sync(uint32_t interval_min)
     BaseType_t res = xTaskCreate(
         time_manager_sync_task,
         "time_sync_task",
-        3072,
+        2048, // measured usage <1k words
         NULL,
         tskIDLE_PRIORITY + 1,
         &s_sync_task_handle
