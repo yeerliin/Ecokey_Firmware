@@ -11,12 +11,14 @@
 #include "mqtt_service.h"
 #include "wifi_sta.h"
 #include "time_manager.h"
-#include "led.h" // Para detener el parpadeo del LED al iniciar el modo automático
+#include "led.h"
+#include "resource_manager.h" // Nuevo componente de gestión de recursos
 
 static const char *TAG = "ESTADO_AUTO";
 static bool estado_activo = false;
 static TaskHandle_t automatico_task_handle = NULL;
 static volatile uint32_t automatico_timeout_ms = 10 * 60 * 1000; // 10 minutos por defecto
+static resource_context_t resource_ctx; // Contexto de recursos
 
 // Configuración
 #define AUTOMATICO_TASK_PERIOD_MS 500
@@ -25,6 +27,19 @@ static volatile uint32_t automatico_timeout_ms = 10 * 60 * 1000; // 10 minutos p
 // Parámetros de ventana de re-chequeo
 #define FRACCION_RECHEQUEO 4         // 1/4 del tiempo total
 #define MIN_RECHEQUEO_MS (50 * 1000) // Nunca menos de 50 segundos
+
+/**
+ * @brief Cleanup específico para el estado automático
+ */
+static void cleanup_automatico(void) {
+    // Asegurar relé desactivado
+    relay_controller_deactivate();
+    ESP_LOGI(TAG, "Relé desactivado");
+    
+    // Detener BLE scanner
+    ble_scanner_deinicializar();
+    ESP_LOGI(TAG, "BLE scanner deinicializado");
+}
 
 static void automatico_task(void *param)
 {
@@ -134,6 +149,22 @@ static void automatico_task(void *param)
 
 esp_err_t estado_automatico_iniciar(void)
 {
+    // Crear contexto de recursos
+    esp_err_t ret = resource_manager_create_context(RESOURCE_TYPE_AUTOMATICO, 
+                                                   &automatico_task_handle, 
+                                                   &resource_ctx);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al crear contexto de recursos: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    // Validar recursos antes de iniciar
+    ret = resource_manager_validate(&resource_ctx);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Validación de recursos falló: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
     if (estado_activo)
     {
         ESP_LOGW(TAG, "Estado automático ya está activo");
@@ -155,8 +186,16 @@ esp_err_t estado_automatico_iniciar(void)
             mqtt_service_enviar_json(topic, 2, 1, "Modo", "automaticoo", NULL);
         }
     }
+    
+    resource_manager_monitor(&resource_ctx, "inicio");
     led_blink_stop(); 
     ESP_LOGI(TAG, "Iniciando el modo automático");
+
+    // === POLÍTICA DEL MODO AUTOMÁTICO ===
+    // En modo automático, el relé empieza APAGADO hasta que se detecte el tag BLE
+    // Esto es crítico para evitar que el relé se quede encendido tras un reinicio
+    relay_controller_set_state(false);
+    ESP_LOGI(TAG, "Relé inicializado en APAGADO - se activará al detectar tag BLE");
 
     // Recuperar la MAC objetivo desde NVS
     char mac_objetivo[24] = {0}; // Formato XX:XX:XX:XX:XX:XX (17 chars + null + extra)
@@ -172,12 +211,16 @@ esp_err_t estado_automatico_iniciar(void)
         ESP_LOGE(TAG, "MAC objetivo no válida: %s", mac_objetivo);
         return ESP_FAIL;
     }
+    
+    resource_manager_monitor(&resource_ctx, "post-nvs");
+    
     // Configurar la MAC en el escáner BLE
     ESP_LOGI(TAG, "Configurando escáner BLE para MAC objetivo: %s", mac_objetivo);
     err = ble_scanner_configurar_mac_objetivo_texto(BLE_TARGET_INDEX, mac_objetivo);
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "Error al configurar MAC objetivo en escáner BLE: %s", esp_err_to_name(err));
+        resource_manager_cleanup(&resource_ctx, cleanup_automatico);
         return ESP_FAIL;
     }
     // Iniciar el escáner BLE si no está iniciado
@@ -185,8 +228,11 @@ esp_err_t estado_automatico_iniciar(void)
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "Error al iniciar escáner BLE: %s", esp_err_to_name(err));
+        resource_manager_cleanup(&resource_ctx, cleanup_automatico);
         return ESP_FAIL;
     }
+
+    resource_manager_monitor(&resource_ctx, "post-ble");
 
     // Recuperar el temporizador desde NVS (en minutos)
     char temporizador_str[8] = {0};
@@ -214,18 +260,23 @@ esp_err_t estado_automatico_iniciar(void)
     ESP_LOGI(TAG, "Timeout de ausencia BLE configurado en %d minutos (%lu ms)", minutos, timeout_ms);
 
     estado_activo = true;
+    resource_manager_set_active(&resource_ctx, true);
 
     if (automatico_task_handle == NULL)
     {
         BaseType_t res = xTaskCreate(
-            automatico_task, "automatico_task", 4096, NULL, 5, &automatico_task_handle);
+            automatico_task, "automatico_task", resource_ctx.config.min_stack_size, NULL, 5, &automatico_task_handle);
         if (res != pdPASS)
         {
             ESP_LOGE(TAG, "Error al crear la tarea automática");
             estado_activo = false;
+            resource_manager_cleanup(&resource_ctx, cleanup_automatico);
             return ESP_FAIL;
         }
     }
+    
+    resource_manager_monitor(&resource_ctx, "post-task-create");
+    ESP_LOGI(TAG, "=== ESTADO AUTOMÁTICO INICIADO CORRECTAMENTE ===");
 
     return ESP_OK;
 }
@@ -238,17 +289,19 @@ esp_err_t estado_automatico_detener(void)
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "Deteniendo el modo automático");
+    ESP_LOGI(TAG, "=== DETENIENDO ESTADO AUTOMÁTICO ===");
+    resource_manager_monitor(&resource_ctx, "pre-detener");
+    
     estado_activo = false;
-
-    // Esperar a que la tarea termine y libere el handle
-    while (automatico_task_handle != NULL)
-    {
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-    relay_controller_set_state(false);
-    // Opcional: detener BLE y limpiar si aplica
-    ble_scanner_deinicializar();
+    
+    // Cleanup usando el gestor de recursos
+    resource_manager_cleanup(&resource_ctx, cleanup_automatico);
+    
+    // Verificar fugas de memoria
+    resource_manager_check_memory_leak(&resource_ctx);
+    
+    resource_manager_monitor(&resource_ctx, "post-detener");
+    ESP_LOGI(TAG, "=== ESTADO AUTOMÁTICO DETENIDO ===");
 
     return ESP_OK;
 }

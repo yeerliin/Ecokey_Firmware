@@ -1,0 +1,18 @@
+menu "Configuración del sensor de temperatura"
+
+    config TEMP_READ_INTERVAL_MS
+        int "Intervalo de lectura (ms)"
+        default 30000
+        range 1000 3600000
+        help
+            Intervalo en milisegundos para leer el sensor de temperatura.
+            El valor mínimo recomendado es 1000 (1 segundo).
+            El valor predeterminado es 30000 (30 segundos).
+
+    config TEMP_WATCHDOG_ENABLED
+        bool "Habilitar watchdog para el sensor de temperatura"
+        default y
+        help
+            Si está habilitado, se reiniciará la tarea de temperatura si se bloquea.
+
+endmenu

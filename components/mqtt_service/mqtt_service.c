@@ -21,6 +21,15 @@
 #include "relay_controller.h"
 #include "app_control.h"
 #include "estado_automatico.h"
+#include "ota_service.h"
+#include "time_manager.h" // Asegúrate de incluir esta cabecera si no lo está ya
+
+// Declaración externa de la variable del motivo de reinicio
+extern esp_reset_reason_t motivo_reinicio_global;
+extern const char* str_motivo_reinicio_global;
+
+// Variable para controlar que el motivo de reinicio se envíe una sola vez por arranque real
+static bool motivo_reinicio_enviado = false;
 
 extern const uint8_t ca_pem_start[] asm("_binary_ca_pem_start");
 extern const uint8_t ca_pem_end[]   asm("_binary_ca_pem_end");
@@ -43,6 +52,62 @@ static bool mqtt_is_connected = false;
 
 // Variable para controlar el procesamiento de mensajes OTA de respuesta
 static uint32_t ultimo_mensaje_ota_enviado = 0;
+
+// Cola para comunicar temperatura entre la tarea de sensor y la de MQTT
+static QueueHandle_t temp_mqtt_queue = NULL;
+static TaskHandle_t temp_mqtt_task_handle = NULL;
+
+// Estructura para datos de temperatura
+typedef struct {
+    float temperatura;
+    uint32_t timestamp;
+} temp_data_t;
+
+// Tarea dedicada para el envío de temperatura por MQTT
+static void temp_mqtt_task(void *pvParameters)
+{
+    temp_data_t temp_data;
+    char temp_topic[96];
+    char temp_str[16];
+    char timestamp_str[16];
+    
+    ESP_LOGI(TAG, "Tarea de envío de temperatura iniciada");
+    
+    while (1) {
+        // Esperar a recibir temperatura (con timeout corto para evitar bloqueo)
+        if (xQueueReceive(temp_mqtt_queue, &temp_data, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            // Si no hay conexión MQTT, descartamos la temperatura pero no bloqueamos
+            if (!mqtt_is_connected || mqtt_client == NULL) {
+                ESP_LOGW(TAG, "MQTT no conectado, descartando temperatura: %.2f°C", temp_data.temperatura);
+                continue;
+            }
+            
+            // Crear string de temperatura con precisión de 2 decimales
+            snprintf(temp_str, sizeof(temp_str), "%.2f", temp_data.temperatura);
+            snprintf(timestamp_str, sizeof(timestamp_str), "%lu", temp_data.timestamp);
+            
+            // Obtener MAC sin dos puntos
+            const char *mac_clean = sta_wifi_get_mac_clean();
+            if (mac_clean == NULL || strlen(mac_clean) < 1) {
+                ESP_LOGW(TAG, "MAC no disponible, descartando temperatura");
+                continue;
+            }
+            
+            // Construir tópico de temperatura
+            snprintf(temp_topic, sizeof(temp_topic), "dispositivos/%s/temperatura", mac_clean);
+            
+            // Publicar usando función no bloqueante
+            ESP_LOGI(TAG, "Enviando temperatura: %s°C por MQTT", temp_str);
+            mqtt_service_enviar_json(temp_topic, 0, 0, 
+                                   "temperatura", temp_str, 
+                                   "timestamp", timestamp_str, 
+                                   NULL);
+        }
+        
+        // Ceder CPU periódicamente para evitar watchdog
+        vTaskDelay(pdMS_TO_TICKS(10)); // Pequeña pausa para no consumir CPU
+    }
+}
 
 // Tarea dedicada para reconexión con backoff
 static void mqtt_reconnect_task(void *pvParameters)
@@ -210,7 +275,8 @@ static void procesar_mensaje_ota(const char *json) {
                     
             // Aquí iniciarías el proceso OTA con el firmware_url
             // Por ejemplo, llamando a una función de un componente OTA:
-            // ota_service_start_update(firmware_url, forzar);
+            ota_service_start_update(url_str, forzar);
+            
             
             // Reportar que se ha recibido la solicitud de actualización
             ultimo_mensaje_ota_enviado = esp_log_timestamp(); // Marca temporal
@@ -312,6 +378,55 @@ static void mqtt_service_procesar_mensaje(const char *topic, const char *json)
     }
 }
 
+// Función para enviar el estado actual del relé al conectarse
+static void enviar_estado_actual_rele(void)
+{
+    const char *mac_topic = sta_wifi_get_mac_clean();
+    if (!mac_topic) {
+        ESP_LOGW(TAG, "MAC no disponible para reporte de estado inicial");
+        return;
+    }
+    
+    // Obtener el estado actual del relé
+    bool estado_rele = false;
+    esp_err_t ret = relay_controller_get_state(&estado_rele);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "No se pudo obtener el estado del relé: %s", esp_err_to_name(ret));
+        return;
+    }
+    
+    // Obtener información adicional del estado actual
+    estado_app_t estado_actual = app_control_obtener_estado_actual();
+    const char *modo_str = (estado_actual == ESTADO_MANUAL) ? "manual" : "automatico";
+    const char *estado_str = estado_rele ? "Encendido" : "Apagado";
+    
+    char fecha_actual[24] = {0};
+    esp_err_t fecha_ok = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
+    
+    // Tópico de estado actual
+    char topic_estado[64];
+    snprintf(topic_estado, sizeof(topic_estado), "dispositivos/%s/estado", mac_topic);
+    
+    ESP_LOGI(TAG, "Reportando estado actual post-reinicio: %s, modo: %s", estado_str, modo_str);
+    
+    // Enviar estado actual con retain=1 y formato estandarizado
+    if (fecha_ok == ESP_OK && strlen(fecha_actual) > 0) {
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str,
+                               "Modo", modo_str,
+                               "Fecha", fecha_actual,
+                               "TipoReporte", "post_reinicio",
+                               NULL);
+    } else {
+        mqtt_service_enviar_json(topic_estado, 2, 1, 
+                               "Estado", estado_str,
+                               "Modo", modo_str,
+                               "TipoReporte", "post_reinicio",
+                               NULL);
+    }
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
@@ -336,6 +451,63 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             mqtt_backoff_ms = 1000; // Reset backoff al conectar
             mqtt_is_connected = true; // Actualizamos el estado de conexión
+
+            // Enviamos el motivo de reinicio por MQTT SOLO si es la primera vez después de un reinicio real
+            if (!motivo_reinicio_enviado) {
+                // Verificamos que sea un reinicio real y no una reconexión tras pérdida de internet
+                if (motivo_reinicio_global != ESP_RST_UNKNOWN) {
+                    char fecha_actual[24] = {0}; // Buffer para la fecha
+                    char reinicio_topic[160]; // Buffer más grande para acomodar la fecha
+                    
+                    // Intentar obtener la fecha actual
+                    esp_err_t fecha_err = time_manager_get_fecha_actual(fecha_actual, sizeof(fecha_actual));
+                    
+                    if (fecha_err == ESP_OK && strlen(fecha_actual) > 0) {
+                        // Formatear el tópico con la fecha (reemplazando espacios y caracteres no válidos)
+                        char fecha_formateada[24] = {0};
+                        const char *src = fecha_actual;
+                        char *dst = fecha_formateada;
+                        
+                        // Convertir la fecha a un formato adecuado para tópico MQTT (sin espacios ni caracteres especiales)
+                        while (*src != '\0' && (dst - fecha_formateada) < sizeof(fecha_formateada) - 1) {
+                            if (*src == ' ' || *src == ':') {
+                                *dst++ = '_'; // Reemplazar espacio o dos puntos con guión bajo
+                            } else if (*src == '-' || (*src >= '0' && *src <= '9')) {
+                                *dst++ = *src; // Mantener guiones y números
+                            }
+                            src++;
+                        }
+                        *dst = '\0'; // Terminar la cadena
+                        
+                        // Crear el tópico con la fecha formateada
+                        snprintf(reinicio_topic, sizeof(reinicio_topic), 
+                                "dispositivos/%s/reinicio/%s", mac_clean, fecha_formateada);
+                        
+                        ESP_LOGI(TAG, "Publicando reinicio en tópico con fecha: %s", reinicio_topic);
+                    } else {
+                        // Si no hay fecha disponible, usar el tópico sin fecha
+                        snprintf(reinicio_topic, sizeof(reinicio_topic), 
+                                "dispositivos/reinicio/%s", mac_clean);
+                        
+                        ESP_LOGW(TAG, "Fecha no disponible, usando tópico sin fecha: %s", reinicio_topic);
+                    }
+                    
+                    mqtt_service_enviar_json(reinicio_topic, 2, 1, 
+                                           "mac", mac_clean, 
+                                           "motivo", str_motivo_reinicio_global, 
+                                           "codigo", esp_reset_reason_to_str(motivo_reinicio_global), 
+                                           "fecha", (fecha_err == ESP_OK) ? fecha_actual : "desconocida",
+                                           NULL);
+                    
+                    ESP_LOGI(TAG, "Motivo de reinicio enviado por MQTT: %s", str_motivo_reinicio_global);
+                    motivo_reinicio_enviado = true; // Marcamos como enviado para no repetirlo en reconexiones
+                }
+            }
+            
+            // NUEVO: Enviar estado actual del relé después de conectarse
+            // Pequeño delay para asegurar que la conexión esté estable
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            enviar_estado_actual_rele();
         }
         break;
         
@@ -389,6 +561,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
         break;
     }
+}
+
+// Función auxiliar para convertir el enum a string
+const char* esp_reset_reason_to_str(esp_reset_reason_t reason) {
+    static char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%d", reason);
+    return buffer;
 }
 
 //========================================================================================================================================================================
@@ -471,6 +650,26 @@ void mqtt_service_enviar_json(const char *topic, int qos, int retain, ...)
     mqtt_service_enviar_dato(topic, json_buffer, qos, retain);
 }
 
+void mqtt_service_notificar_temperatura(float temperatura)
+{
+    if (!temp_mqtt_queue) {
+        ESP_LOGW(TAG, "Cola de temperatura no inicializada, descartando lectura: %.2f°C", temperatura);
+        return;
+    }
+    
+    // Crear estructura con datos de temperatura
+    temp_data_t temp_data = {
+        .temperatura = temperatura,
+        .timestamp = esp_log_timestamp() // Timestamp en milisegundos desde el inicio
+    };
+    
+    // Enviar a la cola con timeout corto para no bloquear 
+    // Si la cola está llena, mejor descartar que bloquear
+    if (xQueueSend(temp_mqtt_queue, &temp_data, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "Cola de temperatura llena, descartando lectura: %.2f°C", temperatura);
+    }
+}
+
 void mqtt_service_start(void)
 {
     if (mqtt_client != NULL)
@@ -524,6 +723,31 @@ void mqtt_service_start(void)
     if (mqtt_reconnect_task_handle == NULL) {
         xTaskCreate(mqtt_reconnect_task, "mqtt_reconnect_task", 4096, NULL, 5, &mqtt_reconnect_task_handle);
     }
+    
+    // Crear la cola de temperatura si no existe
+    if (temp_mqtt_queue == NULL) {
+        temp_mqtt_queue = xQueueCreate(5, sizeof(temp_data_t));
+        if (!temp_mqtt_queue) {
+            ESP_LOGE(TAG, "Error creando cola para temperatura");
+        }
+    }
+    
+    // Crear la tarea para envío de temperatura si no existe
+    if (temp_mqtt_task_handle == NULL) {
+        BaseType_t res = xTaskCreatePinnedToCore(
+                                    temp_mqtt_task, 
+                                    "temp_mqtt_task", 
+                                    3072,           // Stack size 
+                                    NULL,           // Task parameters
+                                    tskIDLE_PRIORITY + 3, // Prioridad media
+                                    &temp_mqtt_task_handle,
+                                    APP_CPU_NUM);   // Ejecutar en APP_CPU
+        if (res != pdPASS) {
+            ESP_LOGE(TAG, "Error creando tarea para temperatura");
+        } else {
+            ESP_LOGI(TAG, "Tarea de envío MQTT de temperatura creada correctamente");
+        }
+    }
 }
 
 void mqtt_service_stop(void)
@@ -539,6 +763,22 @@ void mqtt_service_stop(void)
         esp_mqtt_client_destroy(mqtt_client);
         mqtt_client = NULL;
         mqtt_is_connected = false; // Asegurarse de actualizar el estado
+        
+        // NO reseteamos la bandera motivo_reinicio_enviado aquí,
+        // ya que queremos que permanezca true hasta el próximo reinicio real
+        
         ESP_LOGI(TAG, "MQTT service stopped and resources released");
+    }
+    
+    // Detener y eliminar la tarea de temperatura
+    if (temp_mqtt_task_handle != NULL) {
+        vTaskDelete(temp_mqtt_task_handle);
+        temp_mqtt_task_handle = NULL;
+    }
+    
+    // Eliminar la cola
+    if (temp_mqtt_queue != NULL) {
+        vQueueDelete(temp_mqtt_queue);
+        temp_mqtt_queue = NULL;
     }
 }

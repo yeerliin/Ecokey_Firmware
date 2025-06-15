@@ -9,6 +9,10 @@ static const char *TAG = "NVS_MANAGER";
 static char storage_namespace[16] = "ecokey"; // Valor por defecto
 static bool is_initialized = false;
 
+// Claves NVS para WiFi
+#define WIFI_NVS_SSID_KEY "ssid"
+#define WIFI_NVS_PASS_KEY "password"
+
 esp_err_t nvs_manager_init(const char* namespace)
 {
     // Si se proporciona un namespace válido, lo usamos
@@ -492,6 +496,215 @@ esp_err_t nvs_manager_save_mac(const char *mac)
 
     nvs_close(nvs_handle);
     return err;
+}
+
+bool nvs_manager_has_wifi_credentials(void)
+{
+    if (!is_initialized) {
+        ESP_LOGW(TAG, "NVS no inicializado");
+        return false;
+    }
+    
+    // Verificar si existe el SSID en NVS (requisito mínimo)
+    if (!nvs_manager_key_exists(WIFI_NVS_SSID_KEY)) {
+        ESP_LOGD(TAG, "No hay SSID almacenado en NVS");
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "Credenciales WiFi encontradas en NVS");
+    return true;
+}
+
+esp_err_t nvs_manager_get_wifi_credentials(char *ssid, size_t ssid_len, 
+                                          char *password, size_t password_len)
+{
+    if (!is_initialized) {
+        ESP_LOGE(TAG, "NVS no inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (!ssid || ssid_len < 33 || !password || password_len < 65) {
+        ESP_LOGE(TAG, "Parámetros inválidos para obtener credenciales WiFi");
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Verificar si existe el SSID
+    if (!nvs_manager_key_exists(WIFI_NVS_SSID_KEY)) {
+        ESP_LOGW(TAG, "No hay SSID almacenado en NVS");
+        return ESP_ERR_NOT_FOUND;
+    }
+    
+    // Inicializar buffers
+    memset(ssid, 0, ssid_len);
+    memset(password, 0, password_len);
+    
+    // Obtener SSID
+    esp_err_t ret = nvs_manager_get_string(WIFI_NVS_SSID_KEY, ssid, ssid_len);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al leer SSID de NVS: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    // Obtener password si existe (opcional)
+    if (nvs_manager_key_exists(WIFI_NVS_PASS_KEY)) {
+        ret = nvs_manager_get_string(WIFI_NVS_PASS_KEY, password, password_len);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al leer contraseña de NVS: %s", esp_err_to_name(ret));
+            // No es error crítico, podría ser una red abierta
+        }
+    }
+    
+    ESP_LOGI(TAG, "Credenciales WiFi obtenidas correctamente. SSID: %s", ssid);
+    return ESP_OK;
+}
+
+esp_err_t nvs_manager_save_wifi_credentials(const char *ssid, const char *password)
+{
+    if (!is_initialized) {
+        ESP_LOGE(TAG, "NVS no inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (!ssid || strlen(ssid) == 0) {
+        ESP_LOGE(TAG, "SSID no válido");
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Guardar SSID
+    esp_err_t ret = nvs_manager_set_string(WIFI_NVS_SSID_KEY, ssid);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al guardar SSID en NVS: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    // Guardar password si existe
+    if (password && strlen(password) > 0) {
+        ret = nvs_manager_set_string(WIFI_NVS_PASS_KEY, password);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al guardar contraseña en NVS: %s", esp_err_to_name(ret));
+            return ret;
+        }
+    } else {
+        // Si no hay password, eliminar la clave si existía
+        if (nvs_manager_key_exists(WIFI_NVS_PASS_KEY)) {
+            ret = nvs_manager_erase_key(WIFI_NVS_PASS_KEY);
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Error al borrar contraseña anterior: %s", esp_err_to_name(ret));
+                // No es un error crítico
+            }
+        }
+    }
+    
+    ESP_LOGI(TAG, "Credenciales WiFi guardadas. SSID: %s", ssid);
+    return ESP_OK;
+}
+
+esp_err_t nvs_manager_delete_wifi_credentials(void)
+{
+    if (!is_initialized) {
+        ESP_LOGE(TAG, "NVS no inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    esp_err_t ret = ESP_OK;
+    bool error = false;
+    
+    // Eliminar SSID si existe
+    if (nvs_manager_key_exists(WIFI_NVS_SSID_KEY)) {
+        ret = nvs_manager_erase_key(WIFI_NVS_SSID_KEY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al borrar SSID: %s", esp_err_to_name(ret));
+            error = true;
+        }
+    }
+    
+    // Eliminar password si existe
+    if (nvs_manager_key_exists(WIFI_NVS_PASS_KEY)) {
+        esp_err_t ret2 = nvs_manager_erase_key(WIFI_NVS_PASS_KEY);
+        if (ret2 != ESP_OK) {
+            ESP_LOGE(TAG, "Error al borrar contraseña: %s", esp_err_to_name(ret2));
+            error = true;
+            if (ret == ESP_OK) {
+                ret = ret2; // Preservar el primer error si hubo
+            }
+        }
+    }
+    
+    if (!error) {
+        ESP_LOGI(TAG, "Credenciales WiFi eliminadas correctamente");
+    }
+    
+    return ret;
+}
+
+/**
+ * @brief Guarda las credenciales WiFi en NVS
+ * 
+ * @param ssid SSID de la red WiFi
+ * @param password Contraseña de la red WiFi (puede ser NULL o cadena vacía para redes abiertas)
+ * @return esp_err_t ESP_OK si se guardaron correctamente
+ */
+esp_err_t nvs_manager_set_wifi_credentials(const char *ssid, const char *password)
+{
+    if (!s_initialized) {
+        ESP_LOGE(TAG, "NVS Manager no inicializado");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (ssid == NULL || strlen(ssid) == 0) {
+        ESP_LOGE(TAG, "SSID no válido");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret;
+    nvs_handle_t nvs_handle;
+
+    // Abrir el espacio NVS para escritura
+    ret = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al abrir NVS para escritura: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Guardar el SSID
+    ret = nvs_set_str(nvs_handle, WIFI_SSID_KEY, ssid);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al guardar SSID: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    // Guardar la contraseña (si se proporciona)
+    if (password != NULL) {
+        ret = nvs_set_str(nvs_handle, WIFI_PASS_KEY, password);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al guardar contraseña: %s", esp_err_to_name(ret));
+            nvs_close(nvs_handle);
+            return ret;
+        }
+    } else {
+        // Si no se proporciona contraseña, guardar cadena vacía
+        ret = nvs_set_str(nvs_handle, WIFI_PASS_KEY, "");
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error al guardar contraseña vacía: %s", esp_err_to_name(ret));
+            nvs_close(nvs_handle);
+            return ret;
+        }
+    }
+
+    // Confirmar los cambios en NVS
+    ret = nvs_commit(nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error al hacer commit en NVS: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    // Cerrar el espacio NVS
+    nvs_close(nvs_handle);
+    
+    ESP_LOGI(TAG, "Credenciales WiFi guardadas correctamente en NVS. SSID: %s", ssid);
+    return ESP_OK;
 }
 
 

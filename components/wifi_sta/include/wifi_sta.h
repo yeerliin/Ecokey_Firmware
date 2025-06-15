@@ -49,6 +49,24 @@ const char *sta_wifi_get_mac_clean(void);
 esp_err_t sta_wifi_connect(const char *ssid, const char *password, uint32_t timeout_ms);
 
 /**
+ * @brief Conecta a un AP WiFi usando las credenciales almacenadas en NVS
+ *        o en Kconfig si no hay credenciales en NVS
+ * 
+ * @param timeout_ms Tiempo de espera en ms (0 = esperar indefinidamente)
+ * @return esp_err_t ESP_OK en caso de éxito, 
+ *                  ESP_ERR_NOT_FOUND si no hay credenciales guardadas ni en NVS ni en Kconfig
+ */
+esp_err_t sta_wifi_connect_with_nvs(uint32_t timeout_ms);
+
+/**
+ * @brief Guarda las credenciales WiFi de Kconfig en NVS si no existen ya
+ * 
+ * @return esp_err_t ESP_OK si se guardaron o ya existían credenciales
+ *                   ESP_ERR_NOT_FOUND si no hay credenciales en Kconfig
+ */
+esp_err_t sta_wifi_save_kconfig_to_nvs(void);
+
+/**
  * @brief Desconecta del AP actual
  * 
  * @return esp_err_t 

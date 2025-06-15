@@ -1,0 +1,98 @@
+menu "WiFi Station Configuration"
+
+    config WIFI_STA_AUTO_RECONNECT
+        bool "Enable automatic WiFi reconnection"
+        default y
+        help
+            Enable automatic reconnection when WiFi connection is lost.
+
+    config WIFI_STA_MAX_RETRIES
+        int "Maximum reconnection retries"
+        depends on WIFI_STA_AUTO_RECONNECT
+        range 0 255
+        default 10
+        help
+            Maximum number of reconnection attempts. Set to 0 for infinite retries.
+
+    config WIFI_STA_INITIAL_RETRY_INTERVAL
+        int "Initial retry interval (ms)"
+        depends on WIFI_STA_AUTO_RECONNECT
+        range 100 30000
+        default 1000
+        help
+            Initial interval between reconnection attempts in milliseconds.
+
+    config WIFI_STA_MAX_RETRY_INTERVAL
+        int "Maximum retry interval (ms)"
+        depends on WIFI_STA_AUTO_RECONNECT
+        range 1000 300000
+        default 30000
+        help
+            Maximum interval between reconnection attempts in milliseconds.
+
+    config WIFI_STA_IGNORE_CONNECTION_ERRORS
+        bool "Ignore temporary connection errors"
+        default y
+        help
+            Ignore temporary connection errors like ESP_ERR_WIFI_CONN and continue
+            with the connection process.
+
+    config WIFI_STA_DEFAULT_SCAN_METHOD
+        int "Default scan method"
+        range 0 1
+        default 0
+        help
+            0: Fast scan (WIFI_FAST_SCAN)
+            1: All channel scan (WIFI_ALL_CHANNEL_SCAN)
+
+    config WIFI_STA_DEFAULT_SORT_METHOD
+        int "Default sort method"
+        range 0 1
+        default 0
+        help
+            0: Sort by signal strength (WIFI_CONNECT_AP_BY_SIGNAL)
+            1: Sort by security (WIFI_CONNECT_AP_BY_SECURITY)
+
+    config WIFI_STA_MIN_RSSI_THRESHOLD
+        int "Minimum RSSI threshold (dBm)"
+        range -127 0
+        default -127
+        help
+            Minimum RSSI threshold for connecting to an AP. Set to -127 to disable.
+
+    config WIFI_STA_MIN_AUTH_MODE
+        int "Minimum authentication mode"
+        range 0 6
+        default 0
+        help
+            Minimum authentication mode required:
+            0: Open
+            1: WEP
+            2: WPA_PSK
+            3: WPA2_PSK
+            4: WPA_WPA2_PSK
+            5: WPA2_ENTERPRISE
+            6: WPA3_PSK
+
+    menu "WiFi Station Credentials"
+        config WIFI_STA_SSID
+            string "WiFi SSID"
+            default ""
+            help
+                SSID of the WiFi network to connect to.
+
+        config WIFI_STA_PASSWORD
+            string "WiFi Password"
+            default ""
+            depends on !WIFI_STA_OPEN_NETWORK
+            help
+                Password for the WiFi network.
+
+        config WIFI_STA_OPEN_NETWORK
+            bool "Open network (no password)"
+            default n
+            help
+                Enable this if the WiFi network is open (no password required).
+    endmenu
+
+endmenu
