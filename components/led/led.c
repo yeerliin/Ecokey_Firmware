@@ -14,7 +14,7 @@
 
 // Variables globales optimizadas
 static const char *TAG = "LED";
-#define LED_TASK_STACK_SIZE  4096
+#define LED_TASK_STACK_SIZE  2048  // blinking task small footprint
 #define LED_TASK_PRIORITY    3
 
 // Configuración del LED
@@ -179,6 +179,9 @@ static void led_blink_task(void *pvParameters)
     led_blink_params_t *params = (led_blink_params_t *)pvParameters;
     bool led_state = false;
     uint32_t repeat_counter = 0;
+
+    ESP_LOGI(TAG, "led_blink_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     
     ESP_LOGI(TAG, "Tarea de parpadeo avanzado iniciada");
     
@@ -299,6 +302,7 @@ esp_err_t led_blink_advanced(const led_blink_params_t* params)
     led_ctx.blink_params = *params;
     led_ctx.blink_active = true;
 
+    // blinking task uses small buffers; 2048-word stack is sufficient
     BaseType_t ret = xTaskCreate(
         led_blink_task,
         "led_blink_adv",

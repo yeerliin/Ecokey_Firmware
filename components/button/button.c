@@ -24,8 +24,8 @@ static const char *ETIQUETA = "BOTON";
 #define INTERVALO_DOBLE_PULSACION_MS 400
 
 // Tamaños de pila para las tareas
-#define STACK_SIZE_TAREA_BOTON  4096
-#define STACK_SIZE_EVENTO_BOTON 4096
+#define STACK_SIZE_TAREA_BOTON  2048  // tarea principal del boton
+#define STACK_SIZE_EVENTO_BOTON 1024  // eventos individuales muy pequeños
 
 // Estados del botón
 typedef enum {
@@ -134,6 +134,8 @@ static void IRAM_ATTR isr_boton(void *arg)
  * @param[in] param Parámetro pasado a la tarea (tipo de evento)
  */
 static void tarea_evento_boton(void* param) {
+    ESP_LOGI(ETIQUETA, "tarea_evento_boton watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     tipo_evento_boton_t evento = *(tipo_evento_boton_t*)param;
     free(param);
     
@@ -152,6 +154,8 @@ static void tarea_evento_boton(void* param) {
  */
 static void tarea_procesar_eventos(void *arg)
 {
+    ESP_LOGI(ETIQUETA, "tarea_procesar_eventos watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     (void)arg;
     evento_isr_t evento;
     while (1) {
@@ -321,6 +325,7 @@ esp_err_t iniciar_boton(funcion_callback_boton_t callback)
         ESP_LOGE(ETIQUETA, "Error agregando handler ISR: %s", esp_err_to_name(err));
         return err;
     }
+    // procesamiento usa muy poca pila, 2048 palabras bastan
     BaseType_t task_created = xTaskCreate(
         tarea_procesar_eventos,
         "tarea_boton",

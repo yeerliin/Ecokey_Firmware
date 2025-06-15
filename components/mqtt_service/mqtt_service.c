@@ -70,6 +70,9 @@ static void temp_mqtt_task(void *pvParameters)
     char temp_topic[96];
     char temp_str[16];
     char timestamp_str[16];
+
+    ESP_LOGI(TAG, "temp_mqtt_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     
     ESP_LOGI(TAG, "Tarea de envío de temperatura iniciada");
     
@@ -112,6 +115,8 @@ static void temp_mqtt_task(void *pvParameters)
 // Tarea dedicada para reconexión con backoff
 static void mqtt_reconnect_task(void *pvParameters)
 {
+    ESP_LOGI(TAG, "mqtt_reconnect_task watermark=%u",
+             uxTaskGetStackHighWaterMark(NULL));
     while (1) {
         if (mqtt_reconnect_pending) {
             ESP_LOGI(TAG, "Backoff antes de reintentar conexión: %" PRIu32 " ms", mqtt_backoff_ms);
@@ -721,7 +726,8 @@ void mqtt_service_start(void)
 
     // Crear la tarea de reconexión si no existe
     if (mqtt_reconnect_task_handle == NULL) {
-        xTaskCreate(mqtt_reconnect_task, "mqtt_reconnect_task", 4096, NULL, 5, &mqtt_reconnect_task_handle);
+        // reconnect task uses little stack; allocate 2048 words
+        xTaskCreate(mqtt_reconnect_task, "mqtt_reconnect_task", 2048, NULL, 5, &mqtt_reconnect_task_handle);
     }
     
     // Crear la cola de temperatura si no existe
@@ -735,9 +741,9 @@ void mqtt_service_start(void)
     // Crear la tarea para envío de temperatura si no existe
     if (temp_mqtt_task_handle == NULL) {
         BaseType_t res = xTaskCreatePinnedToCore(
-                                    temp_mqtt_task, 
-                                    "temp_mqtt_task", 
-                                    3072,           // Stack size 
+                                    temp_mqtt_task,
+                                    "temp_mqtt_task",
+                                    2048,           // Reduced stack size
                                     NULL,           // Task parameters
                                     tskIDLE_PRIORITY + 3, // Prioridad media
                                     &temp_mqtt_task_handle,
